@@ -43,6 +43,17 @@
 3. 云模式联调：`npm run dev:cloud`
 4. 类型检查：`npm run lint`
 5. 临时文件归档：`npm run temp:organize`
+6. 推送 GitHub 备份：`npm run backup:github`
+
+## GitHub 备份
+
+- `npm run backup:github` 会在当前 `HEAD` 上创建一个带时间戳的备份 tag，并把同一提交推送成一个带时间戳的备份分支到 `origin`
+- 默认命名格式：
+- 分支：`backup/<当前分支>-YYYYMMDD-HHmmss`
+- tag：`backup-<当前分支>-YYYYMMDD-HHmmss`
+- 脚本要求工作区干净；如果有未提交改动，会直接中止
+- 预演可用：`npm run backup:github -- --dry-run`
+- 如需自定义名字：`npm run backup:github -- --branch=backup/manual --tag=backup-manual`
 
 ## 临时文件约束
 

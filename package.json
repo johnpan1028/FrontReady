@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "dev:cloud": "node scripts/dev-cloud.mjs",
+    "backup:github": "node scripts/backup-github.mjs",
     "build": "vite build",
     "mock:cloud": "tsx server/mockCloudServer.ts",
     "preview": "vite preview",
