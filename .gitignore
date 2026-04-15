@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.mock-cloud/
+.playwright-mcp/
+artifacts/
+test-results/
+project backup/
+temp/**
+!temp/README.md
+.env*
+!.env.example
