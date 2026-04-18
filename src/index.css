@@ -265,18 +265,146 @@ body {
   border-radius: 0;
 }
 
-.widget-wrapper[data-widget-selected='true'] {
-  outline: 1px dashed color-mix(in srgb, var(--theme-primary) 52%, transparent 48%);
-  outline-offset: 3px;
+.widget-wrapper[data-widget-dragging='true'] {
+  z-index: 40;
 }
 
-.widget-wrapper[data-widget-selected='true'][data-builder-node-type='panel'],
-.widget-wrapper[data-widget-selected='true'][data-builder-node-type='shadcn_login_card'],
-.widget-wrapper[data-widget-selected='true'][data-builder-node-type='button'],
-.widget-wrapper[data-widget-selected='true'][data-builder-node-type='icon_button'],
-.widget-wrapper[data-widget-selected='true'][data-builder-node-type='text_input'],
-.widget-wrapper[data-widget-selected='true'][data-builder-node-type='number_input'] {
-  outline-color: transparent;
+.widget-wrapper[data-widget-dragging='true'] > div:first-child {
+  opacity: 0;
+  outline: none;
+  box-shadow: none;
+  transition: opacity 0.12s ease;
+}
+
+[data-widget-drag-ghost='true'] {
+  opacity: 1;
+  border-radius: inherit;
+  outline: 1px dashed color-mix(in srgb, var(--theme-primary) 72%, transparent 28%);
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--theme-primary) 24%, transparent 76%),
+    0 0 0 4px color-mix(in srgb, var(--theme-primary) 12%, transparent 88%),
+    0 20px 38px rgba(15, 23, 42, 0.22);
+}
+
+[data-widget-drag-ghost='true'] > div:first-child {
+  opacity: 1 !important;
+  outline: none;
+  transform: none;
+}
+
+[data-widget-drag-ghost='true'] .external-move-handle,
+[data-widget-drag-ghost='true'] .kit-root-board-handle,
+[data-widget-drag-ghost='true'] button {
+  opacity: 0 !important;
+}
+
+[data-widget-drag-proxy='true'] {
+  opacity: 0.96;
+  border-radius: var(--theme-radius-panel);
+  outline: none;
+  background: color-mix(in srgb, var(--theme-panel) 96%, transparent 4%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--theme-primary) 32%, transparent 68%),
+    0 0 0 4px color-mix(in srgb, var(--theme-primary) 10%, transparent 90%),
+    0 18px 38px rgba(15, 23, 42, 0.20);
+}
+
+[data-widget-drag-proxy='true']::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 52%, transparent 48%);
+  border-radius: var(--theme-radius-panel);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-panel) 82%, transparent 18%);
+}
+
+.widget-wrapper[data-widget-drag-proxy='true'],
+.widget-wrapper[data-widget-drag-proxy='true'][data-widget-selected='true'] {
+  outline: none !important;
+}
+
+[data-widget-drag-proxy='true'] > div:first-child {
+  opacity: 1 !important;
+  transform: none;
+}
+
+[data-widget-drag-proxy='true'] .external-move-handle,
+[data-widget-drag-proxy='true'] .kit-root-board-handle,
+[data-widget-drag-proxy='true'] .react-resizable-handle,
+[data-widget-drag-proxy='true'] button {
+  opacity: 0 !important;
+}
+
+/* Container widget drag-over visual feedback */
+.widget-wrapper.drag-over {
+  outline: 2px dashed color-mix(in srgb, var(--theme-primary) 88%, white 12%);
+  outline-offset: 2px;
+  background-color: color-mix(in srgb, var(--theme-primary) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-primary) 22%, transparent 78%);
+}
+
+/* Ensure nested canvas inside containers accepts drops */
+.nested-canvas-drop-zone {
+  min-height: 60px;
+  transition: background-color 0.15s ease, outline-color 0.15s ease;
+}
+
+.nested-canvas-drop-zone.drag-active {
+  background-color: color-mix(in srgb, var(--theme-primary) 8%, transparent);
+  outline: 2px dashed var(--theme-primary);
+  outline-offset: -2px;
+  border-radius: var(--theme-radius-panel);
+}
+
+/* RGL item transitions for smooth repositioning */
+/* RGL nested grid items with smooth transitions */
+.react-grid-item.nested-grid-item {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.react-grid-item.nested-grid-item.react-draggable-dragging {
+  transition: none;
+}
+
+.react-grid-item.nested-grid-item.resizing {
+  transition: none;
+  z-index: 100;
+}
+
+.react-grid-item.nested-grid-item.react-grid-placeholder {
+  transition: all 0.2s ease;
+}
+
+[data-nested-canvas-host='true'][data-kit-root-preview-active='true'] .react-grid-item.react-grid-placeholder {
+  opacity: 0 !important;
+  visibility: hidden;
+}
+
+/* RGL internal drag handle */
+.react-grid-item.nested-grid-item [data-rgl-drag-handle] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 16px;
+  cursor: grab;
+  z-index: 20;
+}
+
+.react-grid-item.nested-grid-item [data-rgl-drag-handle]:active {
+  cursor: grabbing;
+}
+
+/* Ensure nested canvas has proper overflow for animations */
+.nested-layout {
+  contain: layout style;
+}
+
+.widget-wrapper[data-widget-selected='true'] {
+  outline: 1px dashed color-mix(in srgb, var(--theme-primary) 72%, transparent 28%);
+  outline-offset: 3px;
 }
 
 .widget-wrapper[data-widget-selected='true'][data-builder-node-type='panel'] [data-select-surface='card'],
@@ -676,6 +804,18 @@ body {
   min-height: 0;
 }
 
+.page-board-flow .react-flow__pane,
+.page-board-flow .react-flow__pane.draggable,
+.page-board-flow .react-flow__node.draggable,
+.page-board-flow .react-flow__node.draggable.dragging {
+  cursor: default;
+}
+
+.page-board-flow .react-flow__pane.dragging,
+.page-board-flow .react-flow__pane.draggable:active {
+  cursor: grabbing;
+}
+
 .page-board-node {
   display: flex;
   flex-direction: column;
@@ -688,6 +828,19 @@ body {
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
   color: var(--shell-text);
   contain: layout paint;
+}
+
+.kit-board-drop-preview,
+.react-grid-item.react-grid-placeholder {
+  width: 100%;
+  height: 100%;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 46%, transparent 54%);
+  border-radius: var(--theme-radius-panel);
+  background: color-mix(in srgb, var(--theme-primary) 10%, transparent 90%);
+  opacity: 1;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--theme-primary) 10%, transparent 90%),
+    0 0 0 4px color-mix(in srgb, var(--theme-primary) 6%, transparent 94%);
 }
 
 .page-board-node-wrap {
@@ -1222,7 +1375,8 @@ h6 {
   background-color: transparent;
   border: none;
   border-radius: 0;
-  transition: none;
+  transition: all 200ms ease;
+  transition-property: transform, left, top, width, height;
   box-shadow: none;
 }
 
@@ -1235,6 +1389,11 @@ h6 {
   border: none;
   border-radius: 0;
   box-shadow: none;
+  overflow: hidden;
+}
+
+.nested-layout > .react-grid-item.react-draggable-dragging,
+.nested-layout > .react-grid-item.react-grid-placeholder {
   overflow: visible;
 }
 
@@ -1243,9 +1402,13 @@ h6 {
 }
 
 .react-grid-item.react-grid-placeholder {
-  background: var(--theme-primary);
-  opacity: 0.1;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 46%, transparent 54%);
+  background: color-mix(in srgb, var(--theme-primary) 10%, transparent 90%);
+  opacity: 1;
   border-radius: var(--theme-radius-panel);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--theme-primary) 10%, transparent 90%),
+    0 0 0 4px color-mix(in srgb, var(--theme-primary) 6%, transparent 94%);
 }
 
 .builder-panel-section,

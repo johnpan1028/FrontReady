@@ -466,8 +466,21 @@ export function BuilderPage() {
     });
   };
   const removeSelectedWidget = () => {
-    if (!activeSelectedId) return;
-    removeWidget(activeSelectedId, activeWorkspaceScope);
+    const targetId = activeSelectedId;
+    if (!targetId) return;
+
+    selectWidget(null, activeWorkspaceScope);
+
+    const performRemoval = () => {
+      removeWidget(targetId, activeWorkspaceScope);
+    };
+
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(performRemoval);
+      return;
+    }
+
+    setTimeout(performRemoval, 0);
   };
   const saveSelectedToKitLibrary = () => {
     if (!activeSelectedId) return;
@@ -1500,7 +1513,7 @@ export function BuilderPage() {
                                 cols={PROJECT_GRID_COLS}
                                 rowHeight={20}
                                 onDrop={handleDrop as any}
-                                dragConfig={{ enabled: true, cancel: '.external-move-handle' }}
+                                dragConfig={{ enabled: true, cancel: '.external-move-handle, .widget-delete-button, .widget-delete-button *' }}
                                 dropConfig={{
                                   enabled: true,
                                   defaultItem: { w: paletteItem?.w || 4, h: paletteItem?.h || 4 },
@@ -1725,6 +1738,8 @@ export function BuilderPage() {
                 selectedLayoutItem={selectedLayoutItem}
                 selectedPage={selectedPage}
                 pages={pages}
+                activeWidgets={activeWidgets}
+                activeLayouts={activeLayouts}
                 sourceOptions={sourceOptions}
                 selectedBindings={selectedBindings}
                 selectedActions={selectedActions}
@@ -1739,6 +1754,7 @@ export function BuilderPage() {
                 isShadcnLoginComposite={isShadcnLoginComposite}
                 widgetInspectorFooter={widgetInspectorFooter}
                 updateSelectedWidgetProps={updateSelectedWidgetProps}
+                updateWidgetPropsById={(widgetId, props) => updateWidgetProps(widgetId, props, activeWorkspaceScope)}
                 updateSelectedLayoutItem={updateSelectedLayoutItem}
                 updateSelectedWidgetAutoOccupyRow={updateSelectedWidgetAutoOccupyRow}
                 handleCreateActionTargetPage={handleCreateActionTargetPage}

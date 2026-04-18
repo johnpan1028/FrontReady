@@ -195,7 +195,9 @@ const createLocalFallbackGateway = (hint: string): WorkspaceGateway => ({
   }),
 });
 
-const runtimeEnv = ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env) ?? {};
+const runtimeEnv: Record<string, string | undefined> = (
+  (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+) ?? {};
 
 const resolveGatewayMode = () => {
   const raw = runtimeEnv.VITE_BUILDER_GATEWAY_MODE;

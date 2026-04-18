@@ -5,6 +5,7 @@
 - `docs/export-constitution-v1.md`：定义用户项目的正式导出标准、技术栈、目录结构、ID 规则、主题规则、数据绑定规则与 AI handoff 规则。后续资产、卡片、蓝图、主题与导出逻辑都应以此为准。
 - `docs/component-procurement-v1.md`：定义外来 React 组件的进货标准、接入方式、首批准入清单，以及为什么优先采用源码型组件而非黑盒组件库。
 - `docs/kit-contract-v1.md`：定义一个卡片或 kit 母版进入资产库前，必须满足的结构、来源、主题、ID、AI handoff 与导出约束。
+- `docs/kit-studio-architecture.md`：定义 Kit Studio 的工作台定位、Card / Control 属性模型、右侧栏结构、主题变量层级，以及外来组件适配模块的边界与开发顺序。
 
 ## 1. 产品定义
 
@@ -287,22 +288,45 @@
 
 ## 7. 当前仓库现状
 
-当前已经有比较好的编辑器雏形：
+当前仓库已经不只是“编辑器雏形”，而是已经具备一条可继续收敛的主链路：
 
-- 组件拖拽和网格布局
-- 嵌套容器
-- 属性面板
-- 本地草稿
-- 模板提取
+- Builder 壳层、Page Board、页面 / Overlay 拓扑与多面板工作台
+- `ProjectDocument` / `ProjectBundle` / schema 校验 / 导入导出 / 版本切换
+- 本地工作区、多项目隔离、草稿与快照存储
+- `local / cloud / supabase` 可替换工作区网关骨架
+- 运行态页面渲染骨架、数据源协议、基础动作 / 绑定结构
+- 主题 preset、reference profile、导入编译与项目主题作用域
+- AI handoff 包、导出就绪校验与前端交付包生成
+- `Mock Cloud` 服务与页面拓扑校验脚本
 
-但缺的关键层是：
+因此当前缺口已经从“有没有这层”切换成“边界是否稳定、工程是否可持续”。
 
-1. **Schema 协议层**
-2. **运行时渲染层**
-3. **数据绑定层**
-4. **动作系统**
-5. **AI handoff 导出层**
-6. **版本化存储**
+当前主要问题集中在以下几类：
+
+1. **工程拆分不足**
+   - `src/pages/BuilderPage.tsx`
+   - `src/store/builderStore.ts`
+   - `src/components/PageBoard.tsx`
+   - `src/components/ProtocolPanels.tsx`
+   - `src/components/BuilderShellPanels.tsx`
+   这些文件已经承载过多职责，后续修复如果继续直接堆加逻辑，维护成本会迅速上升。
+
+2. **拓扑与 Overlay 边界还需要回归**
+   - 页面 / Overlay 的尺寸约束、宿主页同步、轨道排布已经有实现
+   - 但当前 `scripts/verify-page-topology.ts` 仍能打出断言偏差，说明这部分需要优先进入下一轮修复
+
+3. **云端链路仍以骨架为主**
+   - 本地模式已经能完成主要开发
+   - Cloud / Supabase 网关已预留替换接口
+   - 但真实鉴权、稳定同步、异常恢复还没有完全走通
+
+4. **自动化回归不足**
+   - 当前已有类型检查与少量脚本化校验
+   - 但围绕拓扑、导出、运行态、版本切换的自动化验证仍不够密
+
+5. **编辑态 / 预览态 / 运行态仍需继续解耦**
+   - 当前已经共享协议与部分运行层
+   - 但壳层逻辑、编辑逻辑、运行逻辑之间还有继续下沉和隔离的空间
 
 ## 8. 工具选择原则
 
@@ -318,40 +342,37 @@
 
 ## 9. 推荐实施顺序
 
-### Phase 1：打地基
+### Phase 1：先修边界回归
 
-- 统一项目命名
-- 统一目录结构
-- 建立 schema 目录
-- 建立导入导出协议
-- 把草稿从 `localStorage` 升级为可版本化存储
+- 修复 `Page Board` / `Overlay` 尺寸同步与拓扑校验偏差
+- 对齐 `WebStageFrame`、`responsive`、`pageTopology` 的单一约束源
+- 把当前失败的校验脚本变成稳定回归入口
 
-### Phase 2：做协议
+### Phase 2：再拆工程职责
 
-- Project / Page / Node / Action / Binding schema
-- 校验器
-- 默认值生成器
-- 迁移器
+- 拆分 `BuilderPage` 的页面壳编排职责
+- 拆分 `builderStore` 的协议转换、持久化编排与页面编辑逻辑
+- 拆分 `PageBoard`、`ProtocolPanels`、`BuilderShellPanels` 的复合 UI 职责
 
-### Phase 3：做运行态
+### Phase 3：补运行态与导出闭环
 
-- 用同一份 schema 渲染 preview / runtime
-- 区分编辑态与运行态
-- 清理占位组件
+- 继续收敛 edit / preview / runtime 的共享协议边界
+- 补强导出就绪校验、前端交付包与 AI handoff 的一致性验证
+- 把版本切换、导入覆盖、发布版本作为固定回归场景
 
-### Phase 4：做数据与动作
+### Phase 4：稳定数据与云端网关
 
-- mock 数据
-- REST 连接器
-- 基础事件系统
-- 数据刷新机制
+- 继续补齐 REST / Mock 数据请求的运行态验证
+- 收敛 Cloud / Supabase 网关的鉴权、同步和异常恢复路径
+- 让本地模式与云端模式维持同一套上层接口
 
-### Phase 5：做 AI Bridge
+### Phase 5：增加脚本化回归密度
 
-- 导出 AI 任务包
-- 页面结构摘要
-- 接口需求说明
-- 组件映射说明
+- 为页面拓扑、导出、运行态、版本切换补最小自动化脚本
+- 避免后续修一个点、退两个点
+- 让每轮修复都有明确的完成判据
+- 暂缓处理的 debug 项统一登记在 `docs/debug-record.md`，待正式开修时再补维修方案
+- 发现问题、开始修复、修复完成时，均要回写 `docs/debug-record.md`，形成持续更新的维修记录
 
 ## 10. 判断项目是否成功的标准
 

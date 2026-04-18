@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(gh repo:*)",
+      "Bash(npm search:*)",
+      "Bash(npm view:*)",
+      "Bash(npm install:*)",
+      "Bash(which chrome-devtools-mcp:*)",
+      "Bash(claude mcp:*)",
+      "Bash(chrome-devtools-mcp:*)"
+    ]
+  }
+}

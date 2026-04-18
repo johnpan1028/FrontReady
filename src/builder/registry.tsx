@@ -153,14 +153,17 @@ export const WidgetRegistry: Record<string, React.FC<any>> = {
           <span className="truncate">{title}</span>
         </div>
       ) : null}
-      <div className={cn('min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto p-1', chrome === 'shadcn-card' && 'p-6')}>
+      <div
+        className={cn('min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto p-1', chrome === 'shadcn-card' && 'p-6')}
+        style={{ scrollbarGutter: 'stable both-edges' }}
+      >
         {NestedCanvasComponent && <NestedCanvasComponent id={id} compact />}
       </div>
     </Card>
   ),
   canvas: ({ id, layoutMode }) => (
     <div className="w-full h-full border border-dashed border-hr-border/50 rounded-lg bg-hr-panel/30 overflow-hidden relative group/canvas-widget">
-      <div className="absolute top-1 left-1/2 -translate-x-1/2 w-8 h-1.5 bg-hr-border rounded-full opacity-0 group-hover/canvas-widget:opacity-100 transition-opacity cursor-grab z-10" />
+      <div className="pointer-events-none absolute top-1 left-1/2 z-10 h-1.5 w-8 -translate-x-1/2 rounded-full bg-hr-border opacity-0 transition-opacity group-hover/canvas-widget:opacity-100" />
       <div className="w-full h-full pt-3">
         {NestedCanvasComponent && <NestedCanvasComponent id={id} layoutMode={layoutMode} />}
       </div>

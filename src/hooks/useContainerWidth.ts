@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useState } from 'react';
 
-export function useContainerWidth(options: { minDelta?: number } = {}) {
-  const { minDelta = 1 } = options;
+export function useContainerWidth(options: { minDelta?: number; trackHeight?: boolean } = {}) {
+  const { minDelta = 1, trackHeight = true } = options;
   const [width, setWidth] = useState(1200);
   const [height, setHeight] = useState(800);
   const [mounted, setMounted] = useState(false);
@@ -18,7 +18,7 @@ export function useContainerWidth(options: { minDelta?: number } = {}) {
     const nextWidth = Math.floor(rect.width);
     const nextHeight = Math.floor(rect.height);
     if (nextWidth <= 0) return;
-    if (nextHeight > 0) {
+    if (trackHeight && nextHeight > 0) {
       setHeight((currentHeight) => (
         Math.abs(currentHeight - nextHeight) >= minDelta ? nextHeight : currentHeight
       ));
@@ -27,7 +27,7 @@ export function useContainerWidth(options: { minDelta?: number } = {}) {
     setWidth((currentWidth) => (
       Math.abs(currentWidth - nextWidth) >= minDelta ? nextWidth : currentWidth
     ));
-  }, [element, minDelta]);
+  }, [element, minDelta, trackHeight]);
 
   useLayoutEffect(() => {
     setMounted(true);

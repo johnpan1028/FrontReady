@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import type { LegacyLayoutItem } from '../../core/projectDocument';
 import type { BuilderPage as BuilderPageDocument, DataBinding, NodeAction } from '../../schema/project';
 import type { WidgetData } from '../../store/builderStore';
+import { getStudioWidgetDefinition } from '../../kit/definitions/widgetDefinitions';
+import { StudioDefinitionInspector } from '../../kit/inspector/StudioDefinitionInspector';
 import { ActionsPanel, BindingsPanel } from '../ProtocolPanels';
 
 export function WidgetInspectorPanel({
@@ -9,6 +11,8 @@ export function WidgetInspectorPanel({
   selectedLayoutItem,
   selectedPage,
   pages,
+  activeWidgets,
+  activeLayouts,
   sourceOptions,
   selectedBindings,
   selectedActions,
@@ -23,6 +27,7 @@ export function WidgetInspectorPanel({
   isShadcnLoginComposite,
   widgetInspectorFooter,
   updateSelectedWidgetProps,
+  updateWidgetPropsById,
   updateSelectedLayoutItem,
   updateSelectedWidgetAutoOccupyRow,
   handleCreateActionTargetPage,
@@ -31,6 +36,8 @@ export function WidgetInspectorPanel({
   selectedLayoutItem: LegacyLayoutItem | null;
   selectedPage: BuilderPageDocument | null;
   pages: BuilderPageDocument[];
+  activeWidgets: Record<string, WidgetData>;
+  activeLayouts: Record<string, LegacyLayoutItem[]>;
   sourceOptions: Array<{ value: string; label: string }>;
   selectedBindings: DataBinding[];
   selectedActions: NodeAction[];
@@ -45,10 +52,25 @@ export function WidgetInspectorPanel({
   isShadcnLoginComposite: boolean;
   widgetInspectorFooter: ReactNode;
   updateSelectedWidgetProps: (props: Record<string, unknown>) => void;
+  updateWidgetPropsById: (widgetId: string, props: Record<string, unknown>) => void;
   updateSelectedLayoutItem: (updates: Partial<Pick<LegacyLayoutItem, 'x' | 'y' | 'w' | 'h' | 'minW' | 'minH'>>) => void;
   updateSelectedWidgetAutoOccupyRow: (checked: boolean) => void;
   handleCreateActionTargetPage: (kind: BuilderPageDocument['kind']) => BuilderPageDocument | null;
 }) {
+  const selectedWidgetDefinition = selectedWidget
+    ? getStudioWidgetDefinition(selectedWidget.type)
+    : null;
+  const selectedWidgetChildren = selectedWidget
+    ? (activeLayouts[selectedWidget.id] ?? [])
+        .map((item) => activeWidgets[item.i])
+        .filter((item): item is WidgetData => Boolean(item))
+    : [];
+  const shadcnLoginTitleWidget = selectedWidgetChildren.find((widget) => widget.props?.contractKey === 'shadcn.card.login.title');
+  const shadcnLoginDescriptionWidget = selectedWidgetChildren.find((widget) => widget.props?.contractKey === 'shadcn.card.login.description');
+  const shadcnLoginSubmitWidget = selectedWidgetChildren.find((widget) => widget.props?.contractKey === 'shadcn.card.login.submit');
+  const shadcnLoginGoogleWidget = selectedWidgetChildren.find((widget) => widget.props?.contractKey === 'shadcn.card.login.google');
+  const shadcnLoginSignupWidget = selectedWidgetChildren.find((widget) => widget.props?.contractKey === 'shadcn.card.login.signup');
+
   return (
     <>
       {!selectedWidget ? (
@@ -164,7 +186,115 @@ export function WidgetInspectorPanel({
                     </div>
                   ) : null}
 
-                  {selectedWidget.type === 'panel' ? (
+                  {isShadcnLoginComposite ? (
+                    <div className="rounded-xl border border-hr-border bg-hr-panel p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-hr-muted">Composite Content</div>
+                      <div className="mt-3 flex flex-col gap-3">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-medium text-hr-text">Title</label>
+                          <input
+                            type="text"
+                            className="w-full rounded-md border border-hr-border bg-hr-bg px-3 py-2 text-sm text-hr-text focus:outline-none focus:border-hr-primary focus:ring-1 focus:ring-hr-primary"
+                            value={typeof shadcnLoginTitleWidget?.props?.text === 'string' ? shadcnLoginTitleWidget.props.text : ''}
+                            onChange={(e) => {
+                              if (!shadcnLoginTitleWidget) return;
+                              updateWidgetPropsById(shadcnLoginTitleWidget.id, { text: e.target.value });
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-medium text-hr-text">Description</label>
+                          <textarea
+                            className="min-h-[84px] w-full rounded-md border border-hr-border bg-hr-bg px-3 py-2 text-sm leading-5 text-hr-text focus:outline-none focus:border-hr-primary focus:ring-1 focus:ring-hr-primary"
+                            value={typeof shadcnLoginDescriptionWidget?.props?.text === 'string' ? shadcnLoginDescriptionWidget.props.text : ''}
+                            onChange={(e) => {
+                              if (!shadcnLoginDescriptionWidget) return;
+                              updateWidgetPropsById(shadcnLoginDescriptionWidget.id, { text: e.target.value });
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-medium text-hr-text">Primary Action</label>
+                          <input
+                            type="text"
+                            className="w-full rounded-md border border-hr-border bg-hr-bg px-3 py-2 text-sm text-hr-text focus:outline-none focus:border-hr-primary focus:ring-1 focus:ring-hr-primary"
+                            value={typeof shadcnLoginSubmitWidget?.props?.text === 'string' ? shadcnLoginSubmitWidget.props.text : ''}
+                            onChange={(e) => {
+                              if (!shadcnLoginSubmitWidget) return;
+                              updateWidgetPropsById(shadcnLoginSubmitWidget.id, { text: e.target.value });
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-medium text-hr-text">Secondary Action</label>
+                          <input
+                            type="text"
+                            className="w-full rounded-md border border-hr-border bg-hr-bg px-3 py-2 text-sm text-hr-text focus:outline-none focus:border-hr-primary focus:ring-1 focus:ring-hr-primary"
+                            value={typeof shadcnLoginGoogleWidget?.props?.text === 'string' ? shadcnLoginGoogleWidget.props.text : ''}
+                            onChange={(e) => {
+                              if (!shadcnLoginGoogleWidget) return;
+                              updateWidgetPropsById(shadcnLoginGoogleWidget.id, { text: e.target.value });
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-medium text-hr-text">Alternate Action</label>
+                          <input
+                            type="text"
+                            className="w-full rounded-md border border-hr-border bg-hr-bg px-3 py-2 text-sm text-hr-text focus:outline-none focus:border-hr-primary focus:ring-1 focus:ring-hr-primary"
+                            value={typeof shadcnLoginSignupWidget?.props?.emphasisText === 'string'
+                              ? shadcnLoginSignupWidget.props.emphasisText
+                              : typeof shadcnLoginSignupWidget?.props?.text === 'string'
+                                ? shadcnLoginSignupWidget.props.text
+                                : ''}
+                            onChange={(e) => {
+                              if (!shadcnLoginSignupWidget) return;
+                              const currentText = typeof shadcnLoginSignupWidget.props.text === 'string'
+                                ? shadcnLoginSignupWidget.props.text
+                                : '';
+                              const currentEmphasis = typeof shadcnLoginSignupWidget.props.emphasisText === 'string'
+                                ? shadcnLoginSignupWidget.props.emphasisText
+                                : '';
+                              updateWidgetPropsById(shadcnLoginSignupWidget.id, {
+                                emphasisText: e.target.value,
+                                text: currentEmphasis && currentText.includes(currentEmphasis)
+                                  ? currentText.replace(currentEmphasis, e.target.value)
+                                  : e.target.value,
+                              });
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-medium text-hr-text">Handoff Notes</label>
+                          <textarea
+                            className="min-h-[84px] w-full rounded-md border border-hr-border bg-hr-bg px-3 py-2 text-sm leading-5 text-hr-text focus:outline-none focus:border-hr-primary focus:ring-1 focus:ring-hr-primary"
+                            value={typeof selectedWidget.props.aiHandover === 'string' ? selectedWidget.props.aiHandover : ''}
+                            onChange={(e) => updateSelectedWidgetProps({ aiHandover: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedWidgetDefinition && !isShadcnLoginComposite ? (
+                    <StudioDefinitionInspector
+                      definition={selectedWidgetDefinition}
+                      value={selectedWidget}
+                      layoutItem={selectedLayoutItem}
+                      maxCols={showCardLayoutControls ? selectedCardControlMaxCols : 48}
+                      autoOccupyRow={selectedWidgetAutoOccupyRow}
+                      onUpdateProps={updateSelectedWidgetProps}
+                      onUpdateLayout={updateSelectedLayoutItem}
+                      onUpdateAutoOccupyRow={updateSelectedWidgetAutoOccupyRow}
+                    />
+                  ) : null}
+
+                  {!selectedWidgetDefinition && selectedWidget.type === 'panel' ? (
                     <div className="rounded-xl border border-hr-border bg-hr-panel p-3">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-hr-muted">{isShadcnLoginComposite ? 'Card Composition' : 'Card Shell'}</div>
                       <div className="mt-3 flex flex-col gap-3">
@@ -204,7 +334,7 @@ export function WidgetInspectorPanel({
                     </div>
                   ) : null}
 
-                  {selectedWidget.type === 'heading' ? (
+                  {!selectedWidgetDefinition && selectedWidget.type === 'heading' ? (
                     <div className="rounded-xl border border-hr-border bg-hr-panel p-3">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-hr-muted">Text</div>
                       <div className="mt-3 flex flex-col gap-3">
@@ -233,7 +363,7 @@ export function WidgetInspectorPanel({
                     </div>
                   ) : null}
 
-                  {selectedWidget.type === 'text' ? (
+                  {!selectedWidgetDefinition && selectedWidget.type === 'text' ? (
                     <div className="rounded-xl border border-hr-border bg-hr-panel p-3">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-hr-muted">Text</div>
                       <div className="mt-3 flex flex-col gap-1.5">
@@ -247,7 +377,7 @@ export function WidgetInspectorPanel({
                     </div>
                   ) : null}
 
-                  {selectedWidget.type === 'text_input' ? (
+                  {!selectedWidgetDefinition && selectedWidget.type === 'text_input' ? (
                     <div className="rounded-xl border border-hr-border bg-hr-panel p-3">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-hr-muted">Input</div>
                       <div className="mt-3 flex flex-col gap-3">
@@ -308,7 +438,7 @@ export function WidgetInspectorPanel({
                     </div>
                   ) : null}
 
-                  {selectedWidget.type === 'button' ? (
+                  {!selectedWidgetDefinition && selectedWidget.type === 'button' ? (
                     <div className="rounded-xl border border-hr-border bg-hr-panel p-3">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-hr-muted">Action</div>
                       <div className="mt-3 flex flex-col gap-3">
@@ -338,7 +468,7 @@ export function WidgetInspectorPanel({
                     </div>
                   ) : null}
 
-                  {selectedWidget.type === 'shadcn_login_card' ? (
+                  {!selectedWidgetDefinition && selectedWidget.type === 'shadcn_login_card' ? (
                     <div className="rounded-xl border border-hr-border bg-hr-panel p-3">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-hr-muted">Content</div>
                       <div className="mt-3 flex flex-col gap-3">
@@ -394,6 +524,7 @@ export function WidgetInspectorPanel({
                     </div>
                   ) : null}
 
+                  {!selectedWidgetDefinition ? (
                   <div className="rounded-xl border border-hr-border bg-hr-panel p-3">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-hr-muted">AI Handoff</div>
                     <div className="mt-3">
@@ -405,6 +536,7 @@ export function WidgetInspectorPanel({
                       />
                     </div>
                   </div>
+                  ) : null}
 
                   {widgetInspectorFooter}
                 </div>
@@ -565,6 +697,19 @@ export function WidgetInspectorPanel({
                 </div>
               </div>
 
+              {selectedWidgetDefinition ? (
+                <StudioDefinitionInspector
+                  definition={selectedWidgetDefinition}
+                  value={selectedWidget}
+                  layoutItem={selectedLayoutItem}
+                  maxCols={showCardLayoutControls ? selectedCardControlMaxCols : 48}
+                  autoOccupyRow={selectedWidgetAutoOccupyRow}
+                  onUpdateProps={updateSelectedWidgetProps}
+                  onUpdateLayout={updateSelectedLayoutItem}
+                  onUpdateAutoOccupyRow={updateSelectedWidgetAutoOccupyRow}
+                />
+              ) : (
+              <>
               {/* Dynamic Property Editors based on type */}
               {selectedWidget.type === 'panel' && (
                 <>
@@ -848,6 +993,8 @@ export function WidgetInspectorPanel({
                     <option value="flex-col">Flex Column (Vertical)</option>
                   </select>
                 </div>
+              )}
+              </>
               )}
 
               <BindingsPanel

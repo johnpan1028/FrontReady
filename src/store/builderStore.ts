@@ -311,6 +311,12 @@ const areLayoutsEqual = (a: readonly LayoutItemShape[], b: readonly LayoutItemSh
   });
 };
 
+const layoutItemBelongsToParent = (
+  widgets: Record<string, WidgetData>,
+  parentId: string,
+  item: LayoutItemShape,
+) => widgets[item.i]?.parentId === parentId;
+
 const isDescendantParent = (widgets: Record<string, WidgetData>, ancestorId: string, parentId: string) => {
   let cursor: string | undefined = parentId;
   while (cursor && cursor !== 'root') {
@@ -2494,18 +2500,22 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
 
   updateLayout: (parentId, layout, scope = 'page') => set((state) => {
     const currentLayouts = getWorkspaceLayouts(state, scope);
-    const currentLayout = normalizeLayout(currentLayouts[parentId] || []);
     const currentWidgets = getWorkspaceWidgets(state, scope);
-    const incomingLayout = normalizeLayoutForParentScope(layout, currentWidgets, currentLayouts, parentId, scope);
+    const currentLayout = normalizeLayout(currentLayouts[parentId] || [])
+      .filter((item) => layoutItemBelongsToParent(currentWidgets, parentId, item));
+    const incomingLayout = normalizeLayoutForParentScope(layout, currentWidgets, currentLayouts, parentId, scope)
+      .filter((item) => layoutItemBelongsToParent(currentWidgets, parentId, item));
     const layoutIds = new Set(incomingLayout.map((item) => item.i));
-    const missing = currentLayout.filter((item) => !layoutIds.has(item.i) && currentWidgets[item.i]);
+    const missing = currentLayout.filter((item) => (
+      !layoutIds.has(item.i) && layoutItemBelongsToParent(currentWidgets, parentId, item)
+    ));
     const nextLayout = normalizeLayoutForParentScope(
       [...incomingLayout, ...missing],
       currentWidgets,
       currentLayouts,
       parentId,
       scope,
-    );
+    ).filter((item) => layoutItemBelongsToParent(currentWidgets, parentId, item));
 
     if (areLayoutsEqual(currentLayout, nextLayout)) {
       return state;
@@ -2628,6 +2638,7 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
 
     const newWidgets = { ...currentWidgets };
     const newLayouts = { ...currentLayouts };
+    const removedIds = new Set<string>();
 
     const removeRecursively = (nodeId: string) => {
       const current = newWidgets[nodeId];
@@ -2635,6 +2646,7 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
 
       const children = (newLayouts[nodeId] ?? []).map((item) => item.i);
       children.forEach(removeRecursively);
+      removedIds.add(nodeId);
       delete newWidgets[nodeId];
       delete newLayouts[nodeId];
     };
@@ -2645,17 +2657,20 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
 
     removeRecursively(id);
 
+    const nextSelectedId = removedIds.has(state.selectedId ?? '') ? null : state.selectedId;
+    const nextSelectedKitStudioId = removedIds.has(state.selectedKitStudioId ?? '') ? null : state.selectedKitStudioId;
+
     return {
       ...(scope === 'kit'
         ? {
             kitStudioWidgets: newWidgets,
             kitStudioLayouts: newLayouts,
-            selectedKitStudioId: getWorkspaceSelectedId(state, scope) === id ? null : state.selectedKitStudioId,
+            selectedKitStudioId: nextSelectedKitStudioId,
           }
         : {
             widgets: newWidgets,
             layouts: newLayouts,
-            selectedId: state.selectedId === id ? null : state.selectedId,
+            selectedId: nextSelectedId,
             links: getActionSyncedLinks(toLegacySnapshot({
               ...state,
               widgets: newWidgets,
