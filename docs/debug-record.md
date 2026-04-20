@@ -238,6 +238,90 @@
   - `src/kit/definitions/widgetDefinitions.ts`
 - 验证覆盖的复合卡片列表：
   - `card_shadcn_login`
+
+---
+
+### 3. 根画布控件二次拖入 Card Shell 后高度被放大
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-20`
+- 最近更新时间：`2026-04-20`
+- 来源：`Kit Studio` 实际拖拽验证 / `temp/sample-hros/src/components/NestedCanvas.tsx`
+
+#### 现象
+
+- 控件先落在根画布时尺寸正常
+- 但再次从根画布拖入 `Card Shell` 后，高度会被自动拉高
+- 以 `Heading` 为例：
+  - 根画布高度约 `54px`
+  - 拖入卡内 hover placeholder 错误变成约 `86px`
+  - 最终落地后也保持错误高度
+
+#### 当前判断
+
+- 问题不在控件本体渲染，而在**跨作用域拖入时的布局单位换算**
+- 根画布与卡内 nested canvas 使用的高度语义不同：
+  - 根画布控件高度按底层 root row 计算
+  - 卡内控件高度按 `react-grid-layout` 的 `rowHeight + gap` 计算
+- 如果把根画布已有控件的 `h` 直接原样带进卡内，就会把卡内 gap 一并放大进视觉高度
+
+#### 相关文件
+
+- `src/components/NestedCanvas.tsx`
+- `temp/sample-hros/src/components/NestedCanvas.tsx`
+
+#### 影响范围
+
+- 根画布已有控件二次拖入卡内
+- 左侧 palette 新控件拖入卡内时的 placeholder 高度一致性
+- 卡内 drop preview 与最终落地尺寸的一致性
+
+#### 当前处理决定
+
+- 已按最小改动修复
+- 不改动控件定义，不改动根画布尺寸规则
+- 只在 `NestedCanvas` 的“进入 compact nested canvas”链路补充高度换算
+
+#### 重开条件
+
+满足以下任一条件时重开：
+
+- 后续再次出现“根画布正常、拖入卡内变高”的回归
+- 调整 card 内部 `rowHeight / gap / compact` 规则
+- 重构 root board 与 nested canvas 的尺寸协议
+
+#### 维修方案
+
+- 对照 `sample` 中 nested canvas 的处理方式，保持“进入卡内前先做高度语义转换”
+- 在 `NestedCanvas.tsx` 中新增 root rows → compact rows 的换算
+- 同步覆盖以下链路：
+  - 根画布已有控件拖入卡内
+  - 左侧 palette 新控件拖入卡内
+  - 卡内 hover placeholder 预览
+
+#### 修复后回填项
+
+- 根因确认：根画布 `h` 直接进入 card 内 `react-grid-layout`，被 `rowHeight + gap` 重新解释，导致视觉高度膨胀
+- 最终采用的修复方案：在 `NestedCanvas.tsx` 中引入进入 compact nested canvas 前的高度换算，并让 placeholder 与最终落地共用同一套换算
+- 实际改动文件清单：
+  - `src/components/NestedCanvas.tsx`
+- 验证方式 / 回归结果：
+  - 浏览器实测 `http://127.0.0.1:3002/`
+  - 拖拽链路：`Heading` 先落根画布，再二次拖入 `Card Shell`
+  - 实测结果：
+    - 根画布：`448 × 54`
+    - 卡内 placeholder：`416 × 52`
+    - 卡内落地：`470 × 52`
+  - 不再出现此前的 `54 → 86` 放大
+- 是否需要后续追加清理：
+  - 需要继续在后续布局底层整理时统一 root / nested 的尺寸换算协议，但当前主问题已闭环
+
+#### 更新日志
+
+- `2026-04-20`：发现根画布控件二次拖入卡内后高度被放大，登记问题
+- `2026-04-20`：对照 `sample` 确认根因是 root rows 与 card 内 compact rows 的语义不一致，开始修复
+- `2026-04-20`：完成 `NestedCanvas.tsx` 高度换算修复，并通过浏览器实测确认 `54 → 52 → 52`
 - 是否需要补充模板迁移脚本：当前不需要
 
 #### 更新日志
@@ -1784,6 +1868,330 @@
 - `2026-04-20`：按实际 gutter 对 nested canvas host 做反向补偿，CDP、lint、build 均通过
 - `2026-04-20`：根据产品语义修正为只补偿左侧 fake gutter；右侧 padding 以控件到滚动条左边缘为准，不包含滚动条宽度
 - `2026-04-20`：最终修正为移除稳定 gutter；只有滚动条真实出现时才由浏览器自然扣除滚动条宽度
+
+---
+
+### 21. Kit Studio root Card Shell 行高出现小数
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-20`
+- 最近更新时间：`2026-04-20`
+- 来源：`Kit Studio` Inspector 实操反馈 / `src/components/NestedCanvas.tsx`
+
+#### 现象
+
+- root `Card Shell` 在自动高度 / 内部边距跟随后
+- 右侧 Inspector 的 `Rows` 或 `Min Rows` 会出现小数
+- 示例现象：`Rows = 16.09090909`
+
+#### 当前判断
+
+- root `Card Shell` 虽然使用 ReactFlow 作为根层承载，但它的 `w / h / minW / minH` 仍然是母板网格语义
+- 这组值应该继续保持整数，不能出现小数行高
+- 小数来自 `scrollable=false` 自动高度反推时，root kit 场景曾直接写回 `rawTargetHeight`
+
+#### 相关文件
+
+- `src/components/NestedCanvas.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- Kit Studio 右侧 Inspector 的布局参数可读性
+- root card shell 的网格约束一致性
+- 后续 root 卡壳缩放、自动高度、最小高度判断
+
+#### 当前处理决定
+
+- 保持自动高度机制
+- 不再允许 root card shell 的 `h / minH` 写回小数
+- 统一向上取整，继续服从根层整数网格
+
+#### 重开条件
+
+- root `Card Shell` 的 `Rows` 再次出现小数
+- `Min Rows` 再次出现历史遗留小数
+- 自动高度改完后出现明显的底部 padding 回退问题
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `NestedCanvas` 自动高度回写中：
+  - `targetHeight` 统一改为 `Math.ceil(rawTargetHeight)`
+  - 历史遗留的 `currentMinHeight` 先做整数化，再参与比较与写回
+
+#### 修复后回填项
+
+- 根因确认：此前 root kit 场景为了贴合自动高度，直接写回了未取整的 `rawTargetHeight`，导致 root card shell 的 `h / minH` 出现小数
+- 实际改动文件清单：
+  - `src/components/NestedCanvas.tsx`
+  - `docs/debug-record.md`
+- 验证方式：
+  - 进入 `Kit Studio`
+  - 选择启用自动高度的 root `Card Shell`
+  - 检查 Inspector 中 `Rows / Min Rows` 为整数
+  - 用户实测确认：问题已解决
+
+#### 更新日志
+
+- `2026-04-20`：收到 root card shell `Rows` 出现小数的反馈
+- `2026-04-20`：定位到自动高度写回时 root kit 场景直接使用 `rawTargetHeight`
+- `2026-04-20`：修正为 root card shell 统一写回整数行高，并同步收口历史遗留小数 `minH`
+- `2026-04-20`：用户实测确认已解决，保持当前方案结案
+
+---
+
+### 20. Card Shell 在 Fit board 后缩放会破坏右侧包裹
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-20`
+- 最近更新时间：`2026-04-20`
+- 来源：`Kit Studio` 实操反馈 / `src/builder/WidgetWrapper.tsx`
+
+#### 现象
+
+- 在 Kit Studio 工具栏点击 `Fit board` 后，再拖动 root `Card Shell` 右下角缩放柄
+- 已经稳定的内部控件与卡壳约束会被打破
+- 主要表现为 card shell 右边距无法继续正确包裹内部控件
+
+#### 当前判断
+
+- 问题由 ReactFlow `fitView()` 改变 viewport zoom 后触发
+- root card shell 的自定义 resize 预览链路仍按屏幕像素写入 `widget-wrapper` 和 `.project-theme-scope--inline`
+- 当 viewport zoom 不是 `1` 时，屏幕像素被误当作 ReactFlow 内部逻辑像素，导致预览阶段卡壳 CSS 宽度被缩小
+- `NestedCanvas` 原先用 `getBoundingClientRect()` 测宽，在 ReactFlow zoom 后会读到被缩放后的视觉宽度，进一步把内部 grid 宽度误算小
+
+#### 相关文件
+
+- `src/builder/WidgetWrapper.tsx`
+- `src/components/NestedCanvas.tsx`
+- `src/hooks/useContainerWidth.ts`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- Kit Studio root `Card Shell` 在非 1 倍 zoom 下的手动缩放
+- Card shell 内部 controls 的右侧 padding / 包裹约束
+- `Fit board`、小地图缩放、手动缩放视口后的后续 card resize 操作
+
+#### 当前处理决定
+
+- 保留 `Fit board` / `fitView()` 行为
+- 保留现有 root ReactFlow 底板和自定义 card resize 方案
+- 只修正 resize 预览与 nested canvas 测宽的坐标系
+
+#### 重开条件
+
+- `Fit board` 后再次缩放 root card shell，右侧 padding 无法包裹内部控件
+- ReactFlow zoom 不为 `1` 时，card shell resize 预览宽度和最终落地宽度不一致
+- 卡内 grid 在视口缩放后按视觉宽度而不是布局宽度计算
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `WidgetWrapper`：
+  - 解析最近 ReactFlow viewport 的 transform scale
+  - pointer move 的 `deltaX / deltaY` 先除以 zoom，再换算为 root layout `w / h`
+  - 预览阶段写入的是未缩放的 ReactFlow 逻辑 CSS 宽高，而不是屏幕视觉宽高
+- `useContainerWidth`：
+  - 增加 `measureMode: 'layout' | 'visual'`
+  - layout 模式用 `clientWidth / clientHeight`，避免被 CSS transform scale 影响
+- `NestedCanvas`：
+  - 卡内布局测宽改用 `measureMode: 'layout'`
+
+#### 修复后回填项
+
+- 根因确认：`Fit board` 后 ReactFlow zoom 不是 `1`，root resize 和 nested canvas 测宽混用了屏幕视觉像素与布局逻辑像素
+- 实际改动文件清单：
+  - `src/builder/WidgetWrapper.tsx`
+  - `src/components/NestedCanvas.tsx`
+  - `src/hooks/useContainerWidth.ts`
+  - `docs/debug-record.md`
+- 验证方式：
+  - `npm run lint -- --pretty false`
+  - `npm run build`
+  - 用户实测：`Fit board -> 拖动 root Card Shell 缩放柄`，右侧包裹约束恢复正常
+
+#### 更新日志
+
+- `2026-04-20`：收到 `Fit board` 后拖动 card shell 缩放柄会破坏右侧包裹约束的反馈
+- `2026-04-20`：定位到 ReactFlow zoom 后 root resize 预览和 nested canvas 测宽混用坐标系
+- `2026-04-20`：修复为 resize 使用 ReactFlow 逻辑像素、NestedCanvas 使用 layout 宽度测量；类型检查与生产构建通过
+- `2026-04-20`：根据复测反馈继续收敛，root resize 不再固定使用 `pointerdown` 时的 viewport scale，改为 `pointermove/pointerup` 按当前 ReactFlow scale 实时取值，避免 `Fit board` 动画或后续视口变化影响落地宽度
+- `2026-04-20`：用户实测确认已修复，保持当前方案结案
+
+---
+
+### 21. 右侧属性栏仍残留 ID / TYPE 元数据
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-20`
+- 最近更新时间：`2026-04-20`
+- 来源：`Kit Studio` 实操反馈 / `src/components/BuilderShellPanels.tsx`
+
+#### 现象
+
+- 用户要求右侧属性栏不再显示控件、卡片、项目、页面或关系的 `ID / TYPE` 类元数据
+- 前几轮只移除了局部显示入口，`3002` 页面中仍能看到相关字段
+- 主要残留包括 `Project ID`、`Shell ID`、`Relation ID`、`Relation Type` 以及 widget definition 内的 `Runtime Type` / `Component ID`
+
+#### 当前判断
+
+- 问题不是样式缓存，而是元数据入口分散在多条 inspector 链路
+- `WidgetInspectorPanel` 的顶部字段已经移除，但 `widgetDefinitions.ts` 仍保留 `codeSection`
+- 壳层相关面板 `ProjectContractPanel`、`PageShellInspectorPanel`、`RelationInspectorPanel` 也有独立只读字段
+- 仅在渲染层过滤 `section.id === 'code'` 不够稳，源头定义仍会让后续复用或新面板重新暴露该字段
+
+#### 相关文件
+
+- `src/kit/definitions/widgetDefinitions.ts`
+- `src/components/BuilderShellPanels.tsx`
+- `src/kit/inspector/StudioDefinitionInspector.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- Kit Studio 右侧属性栏的可用空间
+- 控件 / card shell / 项目壳 / 页面壳 / 页面关系的属性配置体验
+- 后续新增 controls 时 inspector 定义的默认展示规则
+
+#### 当前处理决定
+
+- 不改拖拽、布局、card shell 尺寸算法
+- 不删除业务可配置的 `Input Type`、`Action Type` 等功能型选项
+- 只移除系统内部元数据的可见展示入口
+
+#### 重开条件
+
+- 右侧属性栏再次出现 `Project ID`、`Shell ID`、`Relation ID`、`Relation Type`
+- 控件定义 inspector 中再次出现 `Runtime Type` 或 `Component ID`
+- 新增 controls 时默认把内部 `id / type` 字段暴露给用户
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `widgetDefinitions.ts`：
+  - 删除 `readonlyField` helper 与 `codeSection`
+  - 移除所有 control/card inspector 内的 `codeSection` 引用
+- `BuilderShellPanels.tsx`：
+  - 移除 `Project ID`、`Shell ID`、`Relation ID`、`Relation Type` 的只读展示块
+  - 保留 `projectId` / `relation` props 类型兼容，不影响现有调用链
+- `StudioDefinitionInspector.tsx`：
+  - 移除临时 `code` section 过滤兜底，改回完全由源头 definition 决定展示
+
+#### 修复后回填项
+
+- 根因确认：右栏字段入口分布在 widget definition、项目壳面板、页面壳面板和关系面板，前几次只删了局部 UI，源头和旁路仍会显示
+- 实际改动文件清单：
+  - `src/kit/definitions/widgetDefinitions.ts`
+  - `src/components/BuilderShellPanels.tsx`
+  - `src/kit/inspector/StudioDefinitionInspector.tsx`
+  - `docs/debug-record.md`
+- 验证方式：
+  - `rg -n "Component ID|Component Type|Runtime Type|Project ID|Shell ID|Relation ID|Relation Type|codeSection|readonlyField" src -S`
+  - `npm run lint -- --pretty false`
+  - `npm run build`
+  - `curl http://127.0.0.1:3002/` 返回 `200`
+  - `3002` 开发服源码检索无上述字段残留
+  - `npm run verify:kit-inspector`
+
+#### 更新日志
+
+- `2026-04-20`：收到右侧栏仍残留 `ID / TYPE` 的复测反馈
+- `2026-04-20`：定位到 widget definition 的 `codeSection` 和 shell panels 的只读元数据字段仍在
+- `2026-04-20`：完成源头删除与壳面板同步清理，lint、build、源码检索与 `3002` 响应均通过
+- `2026-04-20`：浏览器实测拖入 `Card Shell` 后复现残留，进一步确认 `3002` Vite 旧进程裸模块 URL 仍返回旧 transform 缓存；重启 `3002` 后用浏览器禁用缓存复测，`Component ID / Component Type / Runtime Type / Project ID / Shell ID / Relation ID / Relation Type / Code` 均为 `0`
+- `2026-04-20`：固定回测入口为 `npm run verify:kit-inspector`，脚本使用 Playwright 自带 Chromium，自动补用户态运行库，并输出 `temp/kit-studio-inspector-verify.png`
+
+---
+
+### 22. 根画布控件改宽度后二次拖动预览未同步
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-20`
+- 最近更新时间：`2026-04-20`
+- 来源：`Kit Studio` 实操反馈 / `src/components/KitFactoryBoard.tsx`
+
+#### 现象
+
+- 根画布上的控件在右侧栏修改 `Cols` 后，控件本体尺寸已更新
+- 但再次抓起该控件拖动时，根画布上的落点预览仍沿用旧宽度
+- 实际表现为拖动代理是新尺寸，`.kit-board-drop-preview` 和 `.react-flow__node-preview` 仍是旧尺寸
+
+#### 当前判断
+
+- 不是控件 DOM 尺寸没更新，真实拖动代理已经读取到最新宽度
+- 根因在于 `KitFactoryBoard` 的 `dragover` 预览回退逻辑
+- 现有根控件拖动时，自定义事件 `kit-root-drop-preview` 已带出正确 `width=224`
+- 但随后板面 `updateDropPreview` 在读不到 `dataTransfer` 的已拖动 widget 信息时，回退到 `draggedType` 默认尺寸，按 `Heading` 默认 `16 cols` 重新覆盖成 `448px`
+
+#### 相关文件
+
+- `src/components/KitFactoryBoard.tsx`
+- `scripts/verify-kit-studio-inspector.mjs`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- Kit Studio 根画布控件的二次拖动反馈
+- 控件宽度调整后的拖拽可预判性
+- 后续所有依赖 `draggedType` 默认回退的根层预览逻辑
+
+#### 当前处理决定
+
+- 不改左侧栏新控件拖入逻辑
+- 不改卡内控件拖拽与转场逻辑
+- 仅阻断“已有控件拖动代理存在时，被默认控件预览覆盖”的路径
+
+#### 重开条件
+
+- 根画布已有控件修改宽度后，再次拖动时预览宽度与控件本体不一致
+- `.kit-board-drop-preview` 与 `[data-widget-drag-proxy="true"]` 宽度再次出现不一致
+- 固定回测脚本重新报出根画布拖拽预览宽度错误
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `KitFactoryBoard.tsx`：
+  - 初版曾增加活动拖拽代理检测 `ACTIVE_WIDGET_DRAG_PROXY_SELECTOR`
+  - 最终改为根控件拖拽会话事件 `kit-root-drag-session`
+  - 在根画布 `updateDropPreview` 中，若当前处于根控件拖拽会话，则不再回退到 `draggedType` 默认预览
+- `verify-kit-studio-inspector.mjs`：
+  - 新增“拖入 Heading → 修改 `Cols=8` → 二次拖动”的固定浏览器回测
+  - 校验 `.kit-board-drop-preview`、`.react-flow__node-preview`、拖动代理、本体拖动态四者宽度一致，且为 `224px`
+  - 输出截图 `temp/kit-studio-root-preview-width-verify.png`
+- `index.css`：
+  - 提高 `.kit-board-drop-preview` 的边框、填充和阴影强度
+  - 让根画布拖拽时的落点影子在实际浏览器画面里更容易辨认
+
+#### 修复后回填项
+
+- 根因确认：真实问题不是宽度变更失败，而是已有控件拖动时，正确的自定义根预览被 `draggedType` 默认尺寸回退覆盖
+- 实际改动文件清单：
+  - `src/components/KitFactoryBoard.tsx`
+  - `src/index.css`
+  - `scripts/verify-kit-studio-inspector.mjs`
+  - `docs/debug-record.md`
+- 验证方式：
+  - `node --check scripts/verify-kit-studio-inspector.mjs`
+  - `npm run lint -- --pretty false`
+  - `npm run build`
+  - `npm run verify:kit-inspector`
+  - 浏览器回测结果中 `.kit-board-drop-preview` / `.react-flow__node-preview` / `[data-widget-drag-proxy="true"]` / `.widget-wrapper[data-widget-dragging="true"]` 宽度均为 `224`
+
+#### 更新日志
+
+- `2026-04-20`：收到“改控件宽度数值后，影子没跟着变”的进一步澄清
+- `2026-04-20`：浏览器探针确认自定义根预览事件已发出 `224px`，但随后被根画布 `draggedType` 默认预览覆盖为 `448px`
+- `2026-04-20`：初版补丁通过活动拖动代理检测阻断默认尺寸回退
+- `2026-04-20`：复测反馈出现“影子消失 / 拖动发卡”，定位到初版补丁在 `dragover` 高频阶段做 DOM 扫描，带来额外阻塞并干扰预览时机
+- `2026-04-20`：将判定改为根控件拖拽会话事件 `kit-root-drag-session`，移除 `dragover` 内 DOM 扫描；浏览器复测确认普通二次拖动与改宽度后二次拖动两条链路的影子均恢复正常
+- `2026-04-20`：继续收到“没影子了”的人工反馈；浏览器截图确认 DOM 仍在，但落点影子视觉对比度偏低，于是增强 `.kit-board-drop-preview` 的边框、填充和阴影强度，并重启 `3002` 复测
+- `2026-04-20`：补充固定浏览器回测脚本并实测通过，输出 `temp/kit-studio-root-preview-width-verify.png`
 
 ---
 

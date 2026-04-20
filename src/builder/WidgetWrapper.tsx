@@ -15,7 +15,22 @@ interface WidgetWrapperProps {
 const KIT_DRAG_WIDGET_SIZE_MIME = 'application/x-kit-widget-size';
 const KIT_BOARD_HOST_SELECTOR = '[data-kit-board-host="true"]';
 const KIT_ROOT_DROP_PREVIEW_EVENT = 'kit-root-drop-preview';
+const KIT_ROOT_DRAG_SESSION_EVENT = 'kit-root-drag-session';
 const NESTED_CANVAS_HOST_SELECTOR = '[data-nested-canvas-host="true"]';
+const ROOT_RESIZE_PREVIEW_HOST_SELECTOR = '.project-theme-scope--inline';
+const BORDERABLE_CONTROL_TYPES = new Set<WidgetType>([
+  'heading',
+  'text',
+  'button',
+  'icon_button',
+  'divider',
+  'text_input',
+  'number_input',
+  'textarea',
+  'select',
+  'checkbox',
+  'radio',
+]);
 
 type LayoutItemShape = {
   i: string;
@@ -69,6 +84,20 @@ const isPointInsideElement = (
 const clearKitRootDropPreview = () => {
   window.dispatchEvent(new CustomEvent(KIT_ROOT_DROP_PREVIEW_EVENT, {
     detail: { action: 'clear' },
+  }));
+};
+
+const dispatchKitRootDragSession = (
+  action: 'start' | 'end',
+  widgetId: string,
+  widgetType: WidgetType | null,
+) => {
+  window.dispatchEvent(new CustomEvent(KIT_ROOT_DRAG_SESSION_EVENT, {
+    detail: {
+      action,
+      widgetId,
+      widgetType,
+    },
   }));
 };
 
@@ -152,7 +181,7 @@ const resolveNestedDropLayoutItem = (
   const targetParentLayout = layouts[targetParentWidget.parentId] ?? [];
   const targetParentLayoutItem = targetParentLayout.find((item) => item.i === targetParentId);
   const targetChildLayout = layouts[targetParentId] ?? [];
-  const targetMaxCols = Math.max(1, Number(targetParentLayoutItem?.w ?? 12) - 1);
+  const targetMaxCols = Math.max(1, Number(targetParentLayoutItem?.w ?? 12));
   const nextChildY = targetChildLayout.reduce(
     (maxY, item) => Math.max(maxY, Number(item.y ?? 0) + Number(item.h ?? 1)),
     0,
@@ -190,10 +219,43 @@ const copyComputedCustomProperties = (source: HTMLElement, target: HTMLElement) 
   }
 };
 
+const parseTransformScale = (transform: string | null | undefined) => {
+  if (!transform || transform === 'none') return 1;
+
+  const matrix3dMatch = transform.match(/matrix3d\((.+)\)/);
+  if (matrix3dMatch) {
+    const values = matrix3dMatch[1].split(',').map((value) => Number(value.trim()));
+    const scale = values[0];
+    return Number.isFinite(scale) && scale > 0 ? scale : 1;
+  }
+
+  const matrixMatch = transform.match(/matrix\((.+)\)/);
+  if (matrixMatch) {
+    const values = matrixMatch[1].split(',').map((value) => Number(value.trim()));
+    const scale = values[0];
+    return Number.isFinite(scale) && scale > 0 ? scale : 1;
+  }
+
+  const scaleMatch = transform.match(/scale\(([^)]+)\)/);
+  if (scaleMatch) {
+    const scale = Number(scaleMatch[1].split(',')[0]?.trim());
+    return Number.isFinite(scale) && scale > 0 ? scale : 1;
+  }
+
+  return 1;
+};
+
+const getKitBoardViewportScale = (source: HTMLElement) => {
+  const boardHost = source.closest(KIT_BOARD_HOST_SELECTOR) ?? document.querySelector(KIT_BOARD_HOST_SELECTOR);
+  const viewport = boardHost?.querySelector<HTMLElement>('.react-flow__viewport');
+  return parseTransformScale(viewport ? window.getComputedStyle(viewport).transform : null);
+};
+
 export function WidgetWrapper({ id }: WidgetWrapperProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const dragProxyRef = useRef<HTMLElement | null>(null);
   const dragProxyOffsetRef = useRef({ x: 0, y: 0 });
+  const rootResizePreviewHostRef = useRef<HTMLElement | null>(null);
   const scope = useBuilderWorkspaceScope();
   const widget = useBuilderStore((state) => (scope === 'kit' ? state.kitStudioWidgets[id] : state.widgets[id]));
   const isSelected = useBuilderStore((state) => (
@@ -207,7 +269,26 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
   const moveWidget = useBuilderStore((state) => state.moveWidget);
   const addWidget = useBuilderStore((state) => state.addWidget);
   const updateLayout = useBuilderStore((state) => state.updateLayout);
+  const updateLayoutItem = useBuilderStore((state) => state.updateLayoutItem);
   const [isDragActive, setIsDragActive] = useState(false);
+  const resizeFrameRef = useRef<number | null>(null);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+  const resizeSessionRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startWidthPx: number;
+    startHeightPx: number;
+    minCols: number;
+    minRows: number;
+    pixelPerCol: number;
+    pixelPerRow: number;
+    viewportScale: number;
+    lastCols: number;
+    lastRows: number;
+    lastWidthPx: number;
+    lastHeightPx: number;
+  } | null>(null);
 
   const shouldHideMoveHandle = false;
   const showControlsOnHover = true;
@@ -226,7 +307,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
   const showSmartMoveHandle = scope === 'kit' && (!isRootKitWidget || !isBoardManagedKitNode);
   const childLayout = scopedLayouts[id] ?? [];
   const targetLayoutItem = scopedLayouts[widgetParentId]?.find((item) => item.i === id);
-  const targetMaxCols = Math.max(1, Number(targetLayoutItem?.w ?? 12) - 1);
+  const targetMaxCols = Math.max(1, Number(targetLayoutItem?.w ?? 12));
   const nextChildY = childLayout.reduce((maxY, item) => Math.max(maxY, Number(item.y ?? 0) + Number(item.h ?? 1)), 0);
 
   const getNestedDropLayoutItem = (
@@ -247,6 +328,176 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       minH: sourceLayoutItem?.minH,
     };
   };
+
+  const clearRootResizePreviewStyles = useCallback(() => {
+    const wrapperNode = wrapperRef.current;
+    if (wrapperNode) {
+      wrapperNode.style.removeProperty('width');
+      wrapperNode.style.removeProperty('min-width');
+      wrapperNode.style.removeProperty('height');
+      wrapperNode.style.removeProperty('min-height');
+    }
+
+    const previewHost = rootResizePreviewHostRef.current;
+    if (previewHost) {
+      previewHost.style.removeProperty('width');
+      previewHost.style.removeProperty('min-width');
+      previewHost.style.removeProperty('height');
+      previewHost.style.removeProperty('min-height');
+    }
+    rootResizePreviewHostRef.current = null;
+  }, []);
+
+  const stopRootResize = useCallback(() => {
+    if (resizeFrameRef.current != null) {
+      window.cancelAnimationFrame(resizeFrameRef.current);
+      resizeFrameRef.current = null;
+    }
+
+    if (resizeCleanupRef.current) {
+      resizeCleanupRef.current();
+      resizeCleanupRef.current = null;
+    }
+
+    resizeSessionRef.current = null;
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+  }, []);
+
+  const handleRootResizePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!(scope === 'kit' && widgetParentId === 'root' && widgetType === 'panel')) return;
+    if (!targetLayoutItem) return;
+
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    rootResizePreviewHostRef.current = wrapper.closest(ROOT_RESIZE_PREVIEW_HOST_SELECTOR) as HTMLElement | null;
+
+    event.preventDefault();
+    event.stopPropagation();
+    selectWidget(id, scope);
+
+    const bounds = wrapper.getBoundingClientRect();
+    const viewportScale = getKitBoardViewportScale(wrapper);
+    const startWidthPx = bounds.width / viewportScale;
+    const startHeightPx = bounds.height / viewportScale;
+    const baseCols = Math.max(1, Number(targetLayoutItem.w ?? 1));
+    const minCols = Math.max(1, Number(targetLayoutItem.minW ?? 1));
+    const pixelPerCol = Math.max(1, startWidthPx / baseCols);
+
+    resizeSessionRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startWidthPx,
+      startHeightPx,
+      minCols,
+      minRows: Math.max(1, Number(targetLayoutItem.minH ?? 1)),
+      pixelPerCol,
+      pixelPerRow: Math.max(1, startHeightPx / Math.max(1, Number(targetLayoutItem.h ?? 1))),
+      viewportScale,
+      lastCols: baseCols,
+      lastRows: Math.max(1, Number(targetLayoutItem.h ?? 1)),
+      lastWidthPx: startWidthPx,
+      lastHeightPx: startHeightPx,
+    };
+
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'se-resize';
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const session = resizeSessionRef.current;
+      if (!session || moveEvent.pointerId !== session.pointerId) return;
+
+      moveEvent.preventDefault();
+      const currentScale = getKitBoardViewportScale(wrapperRef.current ?? wrapper);
+      session.viewportScale = currentScale;
+      const deltaX = (moveEvent.clientX - session.startX) / currentScale;
+      const deltaY = (moveEvent.clientY - session.startY) / currentScale;
+      const nextWidthPx = Math.max(session.minCols * session.pixelPerCol, session.startWidthPx + deltaX);
+      const nextHeightPx = Math.max(session.minRows * session.pixelPerRow, session.startHeightPx + deltaY);
+      const nextCols = Math.max(session.minCols, Math.round(nextWidthPx / session.pixelPerCol));
+      const nextRows = Math.max(session.minRows, Math.round(nextHeightPx / session.pixelPerRow));
+      session.lastWidthPx = nextWidthPx;
+      session.lastHeightPx = nextHeightPx;
+
+      const nextWidthStyle = `${Math.round(nextWidthPx)}px`;
+      const nextHeightStyle = `${Math.round(nextHeightPx)}px`;
+      const previewHost = rootResizePreviewHostRef.current;
+      if (
+        nextCols === session.lastCols
+        && nextRows === session.lastRows
+        && wrapperRef.current?.style.width === nextWidthStyle
+        && wrapperRef.current?.style.height === nextHeightStyle
+        && (!previewHost || (
+          previewHost.style.width === nextWidthStyle
+          && previewHost.style.height === nextHeightStyle
+        ))
+      ) return;
+      session.lastCols = nextCols;
+      session.lastRows = nextRows;
+
+      if (resizeFrameRef.current != null) {
+        window.cancelAnimationFrame(resizeFrameRef.current);
+      }
+
+      resizeFrameRef.current = window.requestAnimationFrame(() => {
+        const wrapperNode = wrapperRef.current;
+        const previewHostNode = rootResizePreviewHostRef.current;
+        if (wrapperNode) {
+          wrapperNode.style.width = nextWidthStyle;
+          wrapperNode.style.minWidth = nextWidthStyle;
+          wrapperNode.style.height = nextHeightStyle;
+          wrapperNode.style.minHeight = nextHeightStyle;
+        }
+        if (previewHostNode) {
+          previewHostNode.style.width = nextWidthStyle;
+          previewHostNode.style.minWidth = nextWidthStyle;
+          previewHostNode.style.height = nextHeightStyle;
+          previewHostNode.style.minHeight = nextHeightStyle;
+        }
+        resizeFrameRef.current = null;
+      });
+    };
+
+    const handlePointerEnd = (endEvent: PointerEvent) => {
+      const session = resizeSessionRef.current;
+      if (!session || endEvent.pointerId !== session.pointerId) return;
+      const wrapperNode = wrapperRef.current;
+      const currentScale = getKitBoardViewportScale(wrapperNode ?? wrapper);
+      const finalWidthPx = wrapperNode
+        ? wrapperNode.getBoundingClientRect().width / currentScale
+        : session.lastWidthPx;
+      const finalHeightPx = wrapperNode
+        ? wrapperNode.getBoundingClientRect().height / currentScale
+        : session.lastHeightPx;
+      const nextCols = Math.max(session.minCols, Math.round(finalWidthPx / session.pixelPerCol));
+      const nextRows = Math.max(session.minRows, Math.round(finalHeightPx / session.pixelPerRow));
+      updateLayoutItem(id, 'root', { w: nextCols, h: nextRows }, 'kit');
+      window.setTimeout(() => {
+        clearRootResizePreviewStyles();
+      }, 0);
+      stopRootResize();
+    };
+
+    window.addEventListener('pointermove', handlePointerMove, true);
+    window.addEventListener('pointerup', handlePointerEnd, true);
+    window.addEventListener('pointercancel', handlePointerEnd, true);
+    resizeCleanupRef.current = () => {
+      window.removeEventListener('pointermove', handlePointerMove, true);
+      window.removeEventListener('pointerup', handlePointerEnd, true);
+      window.removeEventListener('pointercancel', handlePointerEnd, true);
+    };
+  }, [
+    id,
+    clearRootResizePreviewStyles,
+    scope,
+    selectWidget,
+    stopRootResize,
+    targetLayoutItem,
+    updateLayoutItem,
+    widgetParentId,
+    widgetType,
+  ]);
 
   const updateDragProxyPosition = useCallback((clientX: number, clientY: number) => {
     const dragProxy = dragProxyRef.current;
@@ -512,6 +763,11 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
 
   useEffect(() => cleanupDragProxy, [cleanupDragProxy]);
 
+  useEffect(() => () => {
+    stopRootResize();
+    clearRootResizePreviewStyles();
+  }, [clearRootResizePreviewStyles, stopRootResize]);
+
   useEffect(() => {
     const node = wrapperRef.current;
     if (!node) return;
@@ -582,6 +838,9 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       data-builder-node-id={widget.id}
       data-builder-node-type={widget.type}
       data-builder-parent-id={widget.parentId}
+      data-widget-border-style={typeof widget.props?.borderStyle === 'string'
+        ? (widget.props.borderStyle === 'transparent' ? 'transparent' : 'solid')
+        : (BORDERABLE_CONTROL_TYPES.has(widget.type) ? 'solid' : 'transparent')}
       data-widget-selected={isSelected ? 'true' : 'false'}
       data-widget-dragging={isDragActive ? 'true' : 'false'}
       className={cn(
@@ -622,6 +881,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
                 return;
               }
               e.stopPropagation();
+              dispatchKitRootDragSession('start', id, widgetType);
 
               const bounds = createDragProxy(e.clientX, e.clientY);
               if (bounds) {
@@ -646,6 +906,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
               updateDragProxyPosition(Number(e.clientX ?? 0), Number(e.clientY ?? 0));
             }}
             onDragEnd={(e) => {
+              dispatchKitRootDragSession('end', id, widgetType);
               cleanupDragProxy();
               setIsDragActive(false);
               handleSmartDragEnd(e);
@@ -670,6 +931,16 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
           >
             <Move size={12} />
           </div>
+        ) : null}
+        {scope === 'kit' && widgetParentId === 'root' && widgetType === 'panel' ? (
+          <span
+            className={cn(
+              "react-resizable-handle react-resizable-handle-se absolute z-20 transition-opacity",
+              isSelected ? "opacity-100" : showControlsOnHover ? "opacity-0 group-hover:opacity-100" : "opacity-0",
+            )}
+            onPointerDown={handleRootResizePointerDown}
+            title="Resize card width"
+          />
         ) : null}
         <Component id={widget.id} {...widget.props} />
       </div>

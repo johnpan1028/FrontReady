@@ -38,6 +38,17 @@ type KitRootDropPreviewEventDetail =
       clientX?: number;
       clientY?: number;
     };
+type KitRootDragSessionEventDetail =
+  | {
+      action: 'start';
+      widgetId: string;
+      widgetType?: WidgetType | null;
+    }
+  | {
+      action: 'end';
+      widgetId: string;
+      widgetType?: WidgetType | null;
+    };
 
 const MASTER_CELL_WIDTH = 28;
 const MASTER_ROW_HEIGHT = 22;
@@ -45,6 +56,7 @@ const ROOT_CONTROL_ROW_HEIGHT = 18;
 const ROOT_NODE_GAP = 12;
 const KIT_DRAG_WIDGET_SIZE_MIME = 'application/x-kit-widget-size';
 const NESTED_CANVAS_HOST_SELECTOR = '[data-nested-canvas-host="true"]';
+const KIT_ROOT_DRAG_SESSION_EVENT = 'kit-root-drag-session';
 
 type RootLayoutItem = {
   i: string;
@@ -421,6 +433,7 @@ export function KitFactoryBoard({
   const lastHandledFocusRequestRef = useRef(0);
   const hasAppliedInitialViewportRef = useRef(false);
   const isNodeDraggingRef = useRef(false);
+  const activeRootDragSessionRef = useRef<KitRootDragSessionEventDetail | null>(null);
   const draggedType = useBuilderStore((state) => state.draggedType);
   const setDraggedType = useBuilderStore((state) => state.setDraggedType);
   const customTemplates = useBuilderStore((state) => state.customTemplates);
@@ -548,6 +561,10 @@ export function KitFactoryBoard({
       return;
     }
 
+    if (activeRootDragSessionRef.current) {
+      return;
+    }
+
     const type = (event.dataTransfer?.getData('text/plain') || draggedType) as WidgetType | 'template';
     if (!type) {
       clearDropPreview();
@@ -620,7 +637,10 @@ export function KitFactoryBoard({
   }, [boardHost, clearDropPreview, customTemplates, draggedType, kitStudioLayouts, kitStudioWidgets, rootLayout]);
 
   useEffect(() => {
-    const handleGlobalDragEnd = () => clearDropPreview();
+    const handleGlobalDragEnd = () => {
+      activeRootDragSessionRef.current = null;
+      clearDropPreview();
+    };
     const handleGlobalDragOver = (event: DragEvent) => {
       const pointTarget = document.elementFromPoint(event.clientX, event.clientY);
       const targetElement = pointTarget instanceof HTMLElement ? pointTarget : null;
@@ -692,17 +712,28 @@ export function KitFactoryBoard({
         data: { width: size.width, height: size.height },
       });
     };
+    const handleKitRootDragSession = (event: Event) => {
+      const detail = (event as CustomEvent<KitRootDragSessionEventDetail>).detail;
+      if (!detail || detail.action === 'end') {
+        activeRootDragSessionRef.current = null;
+        return;
+      }
+
+      activeRootDragSessionRef.current = detail;
+    };
 
     document.addEventListener('dragover', handleGlobalDragOver, true);
     document.addEventListener('drop', handleGlobalDragEnd, true);
     document.addEventListener('dragend', handleGlobalDragEnd, true);
     window.addEventListener('kit-root-drop-preview', handleKitRootDropPreview);
+    window.addEventListener(KIT_ROOT_DRAG_SESSION_EVENT, handleKitRootDragSession);
 
     return () => {
       document.removeEventListener('dragover', handleGlobalDragOver, true);
       document.removeEventListener('drop', handleGlobalDragEnd, true);
       document.removeEventListener('dragend', handleGlobalDragEnd, true);
       window.removeEventListener('kit-root-drop-preview', handleKitRootDropPreview);
+      window.removeEventListener(KIT_ROOT_DRAG_SESSION_EVENT, handleKitRootDragSession);
     };
   }, [boardHost, clearDropPreview, kitStudioWidgets, rootLayout]);
 

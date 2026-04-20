@@ -422,7 +422,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     updateLayout,
     updateLayoutItem,
   } = useBuilderStore();
-  const { width, containerRef, mounted } = useContainerWidth({ trackHeight: false });
+  const { width, containerRef, mounted } = useContainerWidth({ trackHeight: false, measureMode: 'layout' });
   const [nativeDropHost, setNativeDropHost] = useState<HTMLDivElement | null>(null);
   const [compactCanvasViewportHeight, setCompactCanvasViewportHeight] = useState(0);
   const rootPreviewActiveRef = useRef(false);
@@ -487,6 +487,16 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     containerRef(node);
     setNativeDropHost(node);
   }, [containerRef]);
+  const resolveCompactRowsFromRootRows = useCallback((rows: number) => {
+    const rootPixelHeight = Math.max(1, Number(rows || 1)) * ROOT_CONTROL_ROW_HEIGHT;
+    return Math.max(1, Math.round((rootPixelHeight + safeGap) / Math.max(1, rowHeight + safeGap)));
+  }, [rowHeight, safeGap]);
+  const resolveIncomingCompactRows = useCallback((rows: number, sourceParentId?: string | null) => {
+    const normalizedRows = Math.max(1, Number(rows || 1));
+    return sourceParentId == null || sourceParentId === 'root'
+      ? resolveCompactRowsFromRootRows(normalizedRows)
+      : normalizedRows;
+  }, [resolveCompactRowsFromRootRows]);
   const getCurrentContainerElement = useCallback(() => (
     document.querySelector<HTMLElement>(`[data-builder-node-id="${escapeAttributeValue(id)}"]`)
   ), [id]);
@@ -627,15 +637,16 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
       ? (scope === 'kit' ? 0 : 6)
       : toSpacingNumber(parentWidget?.props?.gap, 1);
     const rawTargetHeight = (requiredHeight + parentGap) / (parentRowHeight + parentGap);
-    const targetHeight = Math.max(2, scope === 'kit' && parentId === 'root'
-      ? rawTargetHeight
-      : Math.ceil(rawTargetHeight));
+    const targetHeight = Math.max(2, Math.ceil(rawTargetHeight));
     const currentMinHeight = selfLayoutItem.minH != null ? Number(selfLayoutItem.minH) : undefined;
-    const nextMinHeight = currentMinHeight != null && currentMinHeight > targetHeight
+    const normalizedCurrentMinHeight = currentMinHeight != null
+      ? Math.max(1, Math.ceil(currentMinHeight))
+      : undefined;
+    const nextMinHeight = normalizedCurrentMinHeight != null && normalizedCurrentMinHeight > targetHeight
       ? targetHeight
-      : currentMinHeight;
+      : normalizedCurrentMinHeight;
 
-    if (Number(selfLayoutItem.h) === targetHeight && currentMinHeight === nextMinHeight) return;
+    if (Number(selfLayoutItem.h) === targetHeight && normalizedCurrentMinHeight === nextMinHeight) return;
 
     const frame = window.requestAnimationFrame(() => {
       updateLayoutItem(
@@ -705,12 +716,17 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     item: { x?: number; y?: number; w?: number; h?: number; minW?: number; minH?: number } | null | undefined,
     sourceLayoutItem: { w?: number; h?: number; minW?: number; minH?: number } | null | undefined,
     widgetMeta?: { props?: Record<string, unknown> },
+    sourceParentId?: string | null,
   ) => {
     const behavior = getCompactItemBehavior(widgetMeta);
     const fallbackWidth = Math.max(1, Number(sourceLayoutItem?.w ?? item?.w ?? 8));
+    const fallbackHeight = Math.max(1, Number(sourceLayoutItem?.h ?? item?.h ?? 6));
     const nextWidth = behavior.autoOccupyRow
       ? activeCompactContentCols
       : Math.min(activeCompactContentCols, fallbackWidth);
+    const minHeight = sourceLayoutItem?.minH != null
+      ? resolveIncomingCompactRows(Number(sourceLayoutItem.minH), sourceParentId)
+      : undefined;
 
     return {
       x: behavior.autoOccupyRow
@@ -718,13 +734,13 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
         : Math.max(0, Math.min(Math.round(Number(item?.x ?? 0)), Math.max(0, activeCompactContentCols - nextWidth))),
       y: Math.max(0, Math.round(Number(item?.y ?? 0))),
       w: nextWidth,
-      h: Math.max(1, Number(sourceLayoutItem?.h ?? item?.h ?? 6)),
+      h: Math.max(minHeight ?? 1, resolveIncomingCompactRows(fallbackHeight, sourceParentId)),
       minW: behavior.autoOccupyRow
         ? activeCompactContentCols
         : sourceLayoutItem?.minW,
-      minH: sourceLayoutItem?.minH,
+      minH: minHeight,
     };
-  }, [activeCompactContentCols]);
+  }, [activeCompactContentCols, resolveIncomingCompactRows]);
 
   const handleDrop = (nextLayout: any[], item: any, e: any) => {
     cleanupExternalDragProxy();
@@ -746,8 +762,8 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
       const sourceLayoutItem = scopedLayouts[sourceWidget.parentId]?.find((layoutItem) => layoutItem.i === movedWidgetId);
       const proposedItem = compactGridRulesEnabled
         ? {
-            i: movedWidgetId,
-            ...resolveCompactIncomingLayout(item, sourceLayoutItem, sourceWidget),
+          i: movedWidgetId,
+            ...resolveCompactIncomingLayout(item, sourceLayoutItem, sourceWidget, sourceWidget.parentId),
           }
         : {
             i: movedWidgetId,
@@ -780,7 +796,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     const proposedItem = compactGridRulesEnabled
       ? {
           i: newId,
-          ...resolveCompactIncomingLayout(item, { w, h }, { props: { autoOccupyRow: true } }),
+          ...resolveCompactIncomingLayout(item, { w, h }, { props: { autoOccupyRow: true } }, 'root'),
         }
       : {
           i: newId,
@@ -799,6 +815,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     sourceItem: Partial<GridLayoutItem>,
     itemId: string,
     widgetMeta?: { props?: Record<string, unknown> },
+    sourceParentId?: string | null,
   ): GridLayoutItem => {
     const bounds = event.currentTarget.getBoundingClientRect();
     const activeCols = compact ? activeCompactCols : PROJECT_GRID_COLS.lg;
@@ -808,6 +825,10 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     const relativeX = Math.max(0, event.clientX - bounds.left);
     const relativeY = Math.max(0, event.clientY - bounds.top);
     const behavior = getCompactItemBehavior(widgetMeta);
+    const incomingHeight = Math.max(1, Number(sourceItem.h ?? 4));
+    const incomingMinHeight = sourceItem.minH != null
+      ? resolveIncomingCompactRows(Number(sourceItem.minH), sourceParentId)
+      : undefined;
 
     return normalizeGridItem({
       i: itemId,
@@ -818,9 +839,11 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
         : Math.max(0, Math.min(Math.floor(relativeX / cellWidth), Math.max(0, maxCols - width))),
       y: Math.max(0, Math.floor(relativeY / Math.max(1, rowHeight + margin[1]))),
       w: compactGridRulesEnabled && behavior.autoOccupyRow ? activeCompactContentCols : width,
-      h: Math.max(1, Number(sourceItem.h ?? 4)),
+      h: Math.max(incomingMinHeight ?? 1, compactGridRulesEnabled
+        ? resolveIncomingCompactRows(incomingHeight, sourceParentId)
+        : incomingHeight),
       minW: compactGridRulesEnabled && behavior.autoOccupyRow ? activeCompactContentCols : sourceItem.minW,
-      minH: sourceItem.minH,
+      minH: incomingMinHeight,
     });
   };
 
@@ -846,6 +869,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
         sourceLayoutItem ?? { w: 8, h: 6 },
         movedWidgetId,
         sourceWidget,
+        sourceWidget.parentId,
       );
 
       moveWidget(movedWidgetId, id, proposedItem, scope);
@@ -865,6 +889,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
       getPlaceholderSize(type as WidgetType),
       newId,
       { props: { autoOccupyRow: true } },
+      'root',
     );
 
     addWidget(newId, type as WidgetType, proposedItem, id, undefined, scope);
@@ -918,12 +943,25 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     const movedLayoutItem = movedWidget
       ? scopedLayouts[movedWidget.parentId]?.find((layoutItem) => layoutItem.i === movedWidgetId)
       : undefined;
-    const placeholderSize = movedLayoutItem
-      ? {
-          w: Math.min(activeCompactContentCols, Math.max(1, Number(movedLayoutItem.w ?? 4))),
-          h: Math.max(1, Number(movedLayoutItem.h ?? 4)),
-        }
-      : getPlaceholderSize(draggedType);
+    const placeholderSize = (() => {
+      if (movedLayoutItem) {
+        const behavior = getCompactItemBehavior(movedWidget);
+        const height = Math.max(1, Number(movedLayoutItem.h ?? 4));
+        const width = Math.min(activeCompactContentCols, Math.max(1, Number(movedLayoutItem.w ?? 4)));
+        return {
+          w: behavior.autoOccupyRow ? activeCompactContentCols : width,
+          h: resolveIncomingCompactRows(height, movedWidget?.parentId),
+        };
+      }
+
+      const size = getPlaceholderSize(draggedType);
+      return compactGridRulesEnabled
+        ? {
+            ...size,
+            h: resolveIncomingCompactRows(size.h, 'root'),
+          }
+        : size;
+    })();
 
     return placeholderSize;
   };
