@@ -1193,6 +1193,600 @@
 
 ---
 
+### 14. Vite Dev 首次热载入偶发沿用旧 Inspector 模块
+
+- 状态：`deferred`
+- 优先级：`low`
+- 首次记录时间：`2026-04-18`
+- 最近更新时间：`2026-04-20`
+- 来源：`Kit Studio` / `Card Shell` 实操验证
+
+#### 现象
+
+- 完成 `Card Shell` 右栏字段补充后，首次打开前端并进入 `Kit Studio` 验证时
+- 页面实际仍显示旧版 Inspector 字段集，只出现 `Title / Layout / Show Header`
+- 重新启动一次 `vite dev` 后，再次进入页面，新增字段全部正常出现：
+  - `Show Footer`
+  - `Footer Text`
+  - `Enable Scrollbar`
+  - `Padding X`
+  - `Padding Y`
+  - `Gap`
+
+#### 当前判断
+
+- 当前更像是开发态热载入 / 浏览器会话状态的偶发残留
+- 不是本次 `Card Shell` 运行时代码本身未生效
+- 因为重启前端后，字段渲染、store 同步、DOM 联动均已通过实操验证
+
+#### 相关文件
+
+- `src/kit/definitions/widgetDefinitions.ts`
+- `src/kit/inspector/StudioDefinitionInspector.tsx`
+- `src/components/builder-page/WidgetInspectorPanel.tsx`
+
+#### 影响范围
+
+- 开发阶段的调试效率
+- 首轮验证时对“是否真的生效”的判断准确性
+- 可能造成一次误判，以为功能未接通
+
+#### 当前处理决定
+
+- 当前不进入主线修复
+- 后续若再次出现，再专项检查 `vite dev` / HMR / 本地会话缓存链路
+- 现阶段继续保持“重要结构改动后做一次前端重启”的验证习惯
+
+#### 重开条件
+
+- 同类现象复现频率明显升高
+- 不重启前端时，经常出现 Inspector 字段与源码不一致
+- 开始影响后续 card / control 适配效率
+
+#### 维修方案
+
+- 当前状态：`待后续确定`
+- 后续排查方向：
+  - `vite` 开发态模块替换是否漏掉 definition/inspector 依赖链
+  - 浏览器页签是否保留旧的 builder 运行态状态
+  - `WidgetInspectorPanel` 与 `StudioDefinitionInspector` 的刷新触发条件
+
+#### 修复后回填项
+
+- 根因确认
+- 实际改动文件清单
+- 验证方式
+
+#### 更新日志
+
+- `2026-04-18`：在 `Card Shell` 首轮实操验证时发现一次“旧 Inspector 字段残留”现象；重启前端后恢复正常，暂记为低优先级开发态问题
+
+---
+
+### 2. Card Shell 内部 padding 仅左 / 上生效
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-18`
+- 最近更新时间：`2026-04-18`
+- 来源：`src/components/NestedCanvas.tsx`
+
+#### 现象
+
+- `Card Shell` 右侧栏原先只有 `paddingX / paddingY`
+- 实操时左侧与顶部视觉上会变化，但右侧与底部不稳定或几乎不生效
+- 旧实现还不支持分别控制左/右、上/下
+
+#### 当前判断
+
+- 根因不是 Inspector 没写入，而是 grid 模式依赖 React Grid Layout 的对称 `containerPadding`
+- 该模型天然不适合表达四边独立 padding，也不利于底部留白的稳定呈现
+
+#### 相关文件
+
+- `src/components/NestedCanvas.tsx`
+- `src/builder/registry.tsx`
+- `src/builder/widgetConfig.ts`
+- `src/store/builderStore.ts`
+- `src/kit/definitions/widgetDefinitions.ts`
+- `src/kit/inspector/StudioDefinitionInspector.tsx`
+- `src/runtime/RuntimeCanvas.tsx`
+- `src/runtime/RuntimeRegistry.tsx`
+- `docs/card-shell-panel-technical-note.md`
+
+#### 影响范围
+
+- Kit Studio 内 card shell 的 spacing 可视化
+- 后续进口组件时 card 内部布局基准
+- runtime 预览与 builder 一致性
+
+#### 当前处理决定
+
+- 已改为四边 padding 模型：`Left / Right / Top / Bottom`
+- 新增 `Horizontal Same` 与 `Vertical Same`
+- 保留对旧 `paddingX / paddingY` 数据的读取兼容
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- 关键做法：
+  - grid 模式不再依赖旧的对称 `containerPadding`
+  - 外层 host 直接承担四边 padding
+  - 内部 grid 宽度按左右 padding 扣减后再参与布局计算
+  - store 在 `Horizontal Same / Vertical Same` 开启时自动同步对应两侧数值
+
+#### 修复后回填项
+
+- 根因确认：旧的对称 padding 模型无法覆盖四边独立 spacing 诉求
+- 实际改动文件清单：
+  - `src/components/NestedCanvas.tsx`
+  - `src/builder/registry.tsx`
+  - `src/builder/widgetConfig.ts`
+  - `src/store/builderStore.ts`
+  - `src/kit/definitions/widgetDefinitions.ts`
+  - `src/kit/inspector/StudioDefinitionInspector.tsx`
+  - `src/runtime/RuntimeCanvas.tsx`
+  - `src/runtime/RuntimeRegistry.tsx`
+  - `docs/card-shell-panel-technical-note.md`
+- 验证方式：
+  - `npm run build`
+  - `npm run lint -- --pretty false`
+  - 浏览器内置调试：在 `3001` 的 `Kit Studio` 页签中实测
+    - 独立模式测得 `paddingLeft=36px / paddingRight=10px / paddingTop=28px / paddingBottom=18px`
+    - 联动模式测得 `paddingLeft=24px = paddingRight=24px`、`paddingTop=20px = paddingBottom=20px`
+
+#### 更新日志
+
+- `2026-04-18`：记录 `Card Shell` padding 只对左 / 上稳定生效的问题
+- `2026-04-18`：完成四边 padding + 水平 / 垂直联动改造，并完成浏览器实测回填
+
+---
+
+### 15. Card Shell 水平 padding 左右不对等
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-18`
+- 最近更新时间：`2026-04-18`
+- 来源：`Kit Studio` 实际操作验证 / `Card Shell` Inspector
+
+#### 现象
+
+- 在 `Horizontal Same` 关闭后，分别把 `Padding Left` 与 `Padding Right` 先设为 `0`，再分别设为 `10`
+- 虽然 Inspector 数值与 DOM padding 都已更新，但 card 内左右可用内容边界仍然肉眼不对等
+- 对比 `sample` 项目的 panel 行为，当前项目会额外在右侧留出一段隐性空列
+
+#### 当前判断
+
+- 不是 Inspector 写值问题，也不是 panel shell 透传问题
+- 根因在 `NestedCanvas` 的 compact grid 算法：内部 controls 使用的有效列数被人为减掉了一列，导致右侧始终残留隐藏 gutter
+- 因此即使 `Left/Right` 数值相同，视觉上的左右边界也不会等宽
+
+#### 相关文件
+
+- `src/components/NestedCanvas.tsx`
+- `src/builder/WidgetWrapper.tsx`
+- `src/pages/BuilderPage.tsx`
+- `src/builder/widgetConfig.ts`
+- `docs/card-shell-panel-technical-note.md`
+
+#### 影响范围
+
+- `Card Shell` 的水平 padding 视觉正确性
+- Kit Studio 中 card 内 controls 的对齐基线
+- 后续 panel / nested canvas 与 `sample` 算法对齐的可信度
+
+#### 当前处理决定
+
+- 已按最小改动修复
+- 保留现有四边 padding 数据结构与 Inspector 配置
+- 只移除 compact grid 内部多出来的一列隐藏 gutter，不顺带改动其他拖拽与重排逻辑
+- 后续又清理了 `WidgetWrapper` 与 Inspector 里的旧 `cols - 1` 逻辑，避免控件是否占满一行影响左右 padding 观感
+- card shell 根层缩放把手改为复用原生 `react-resizable-handle` 类，不再额外挂一个风格不同的自定义按钮
+- 卡内非占行 controls 的同排行拖拽，改为在 drag 过程中按当前行 DOM 宽度做实时撑宽预判，不再等 drop 后才扩卡
+
+#### 重开条件
+
+满足以下任一条件时重开：
+
+- 再次出现 `Left/Right` 同值但左右边界不对等
+- 后续 card 内 controls 支持多列自由横向布局时出现新的宽度约束问题
+- 需要进一步把 compact 模式和 sample 的 panel 算法继续完全收敛
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- 将 compact 模式的有效内容列数恢复为父 card 的完整列数
+- 不再额外扣除一列作为隐藏右侧 gutter
+- 保持 host 四边 padding + 内部 grid 宽度反推这套现有结构不变
+- controls 默认改为 `autoOccupyRow=true`；取消占行的自由控件不再按 card shell 宽度同比例放大
+- 根层 card shell 缩放把手外观回归原生 resize handle
+- 非占行 controls 在拖拽悬停阶段就触发 card shell 宽度预判扩展
+- 最新宽度规则：只有锁定占行的 controls 跟随 card shell 拉宽；非占行 controls 使用 `最小宽度 → 固定首选宽度` 区间，整行最小边界按该行所有 controls 的最小宽度总和 + gap 计算
+- 二次修正：非占行 controls 的首选宽度改为记录 grid 列宽，不再用当前 panel 像素宽度重新采样，避免 card shell 拉宽后把自由控件从 `w=9` 改写为 `w=10/13`
+- 回归修正：对照 `sample/hros-strategic-cockpit` 后，移除 card shell “放入控件自动撑宽 / 拖拽悬停临时扩列 / 宽度回写”这整条自定义链路，恢复为 `react-grid-layout` 自身布局算法 + 外层壳手动 resize
+
+#### 修复后回填项
+
+- 根因确认：`NestedCanvas` 的 compact grid 通过隐藏一列的方式收缩内容宽度，同时 `WidgetWrapper` 和 Inspector 仍有旧的 `cols - 1` 残留，导致控件不占满一行时更容易暴露右侧隐性 gutter
+- 交互补充：根层 card shell 不是 RGL item，之前额外做了一个自定义缩放按钮，视觉和控件原生缩放把手不一致；同时卡内非占行 controls 的扩卡判定滞后到 drop 之后，导致同排行拖放无法成立
+- 进一步确认：之前 card shell 缩放只是改了外层像素宽度，`NestedCanvas` 仍会把这段预览宽度当成正式宽度参与子布局重算，导致缩放过程中持续写 store、触发卡壳崩溃；同时同排行扩卡只改像素外壳，没有同步提升 compact grid 的临时列数，因此拖拽占位始终判定“放不下”
+- 算法冲突确认：非占行 controls 若继续随 card shell 同比放大，会让同排行 controls 的总宽度随卡壳无限膨胀，反而破坏“多个非占行控件塞入同一行”的判定
+- 二次根因确认：`preferredCompactWidthPxRef` 使用像素宽度做首选值，root card shell 扩宽 / NestedCanvas 重挂后会按新 panel 宽度重新采样，导致非占行 controls 被误认为拥有更大的首选宽度，并由 metric effect 写回布局
+- sample 对照确认：sample 的 `NestedCanvas` 不做任何按子控件自动撑宽 card shell 的逻辑；panel 宽度只由外层 RGL / resize 决定，内部 layout 只在 `onLayoutChange` / drag-stop 后回写 store
+- 实际改动文件清单：
+  - `src/components/NestedCanvas.tsx`
+  - `src/builder/WidgetWrapper.tsx`
+  - `src/pages/BuilderPage.tsx`
+  - `src/builder/widgetConfig.ts`
+  - `docs/card-shell-panel-technical-note.md`
+  - `docs/debug-record.md`
+- 验证方式 / 回归结果：
+  - 代码级对照 `sample` 的 panel / nested canvas 算法
+  - `npm run lint -- --pretty false`
+  - `npm run build`
+  - Playwright/CDP：root card shell 从 `w=18` 拉到 `w=26` 后，子 controls 的 store layout 保持原值，card 不再因为内部 controls 自动被撑宽
+  - Playwright/CDP trace：root card shell resize 后只出现 `updateLayoutItem('panel_test', 'root', { w: 26 })`，不再有内部 panel layout 自动扩宽写入
+  - Playwright/CDP：注入 `panel_test + button_a/button_b`，验证 root card shell 从 `w=18` 拉到 `w=26` 后，非占行 controls 的 store layout 保持原列宽，不再被写成更宽列数
+  - Playwright/CDP trace：确认 root card shell 拉宽后只写 root panel `w=26`，不再追加 `panel_test` 子布局扩宽写入
+  - 继续在 Kit Studio 中验证 `Left=Right` 时左右边界是否等宽，以及占行 / 非占行 controls 的宽度约束是否一致
+  - 重点回归：根层 card shell 缩放不再崩溃；非占行 controls 拖入同一行时，hover 阶段就能临时扩卡并允许落位
+- 是否需要后续追加清理：`否`，若后续扩展多列自由布局，再单独评估 compact 规则
+
+#### 更新日志
+
+- `2026-04-18`：发现 `Card Shell` 水平 padding 左右不对等，定位到 compact grid 隐藏右侧 gutter
+- `2026-04-18`：移除 compact grid 的隐藏 gutter 列，恢复左右 padding 同值时的对等计算
+- `2026-04-18`：继续清理 `cols - 1` 残留，默认 controls 占满一行，并接入同一行 controls 反向撑宽 card shell 的宽度约束
+- `2026-04-18`：将根层 card shell 缩放把手切回原生 `react-resizable-handle` 风格，并把非占行 controls 的扩卡判定提前到 drag 悬停阶段
+- `2026-04-18`：根层 card shell 缩放改为纯预览态，预览期间暂停 `NestedCanvas` 的宽度联动写入，避免缩放崩溃
+- `2026-04-18`：同排行扩卡从“只拉宽像素外壳”改为“同步提升 compact grid 临时列数”，并修正非占行控件落位时不再被强制写回 `x=0`
+- `2026-04-18`：移除非占行 controls 随 card shell 同比放大的逻辑，改为只允许锁定占行控件跟随拉宽；非占行同排按行内最小宽度总和约束卡壳最小收窄边界
+- `2026-04-18`：用 Playwright/CDP 复现并修正二次扩宽：非占行 controls 的首选宽度从像素采样改为列宽记录，root card shell 拉宽后子控件列宽保持稳定
+- `2026-04-18`：重新对照 sample 后，撤销 card shell 自动撑宽方案，回归 `react-grid-layout` 默认布局行为；root 壳宽只保留手动 resize，不再由内部控件拖放驱动自动扩宽
+
+---
+
+### 16. Card Shell 根层拉宽预览被截断
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-18`
+- 最近更新时间：`2026-04-18`
+- 来源：`src/builder/WidgetWrapper.tsx`
+
+#### 现象
+
+- root `Card Shell` 从右下角继续拉宽时，内部内容在拖拽过程中会被截断
+- 视觉上像“没有实时渲染”，但实际是预览宽度只作用到了最内层 `widget-wrapper`
+- 松手落地后最终宽度正常，问题只出现在 drag preview 阶段
+
+#### 当前判断
+
+- 根因不是 `NestedCanvas` 的实时布局回写
+- Playwright/CDP 复现确认：mid-drag 时 `widget-wrapper` 已经变成 `684px`，但外层 `ProjectThemeScope` 仍停留在旧宽度 `504px`
+- 该宿主带有 `contain-paint`，因此虽然下层节点允许 `overflow: visible`，绘制区域仍被旧宽度裁切
+
+#### 相关文件
+
+- `src/builder/WidgetWrapper.tsx`
+- `src/components/KitFactoryBoard.tsx`
+- `src/theme/ProjectThemeScope.tsx`
+
+#### 影响范围
+
+- Kit Studio 根层 `Card Shell` 的手动缩放预览体验
+- 容易误判为 card shell 宽度没有实时响应
+- 影响后续对 card shell 尺寸系统的调试判断
+
+#### 当前处理决定
+
+- 保持现有 root resize 方案不变
+- 只补齐 drag preview 期间的宽度同步宿主
+- 不回退 `contain-paint`，避免波及其他主题/渲染隔离逻辑
+
+#### 重开条件
+
+- 再次出现 root card shell 拉宽过程中右侧内容被裁切
+- `ProjectThemeScope` 与 `widget-wrapper` 的 mid-drag 宽度重新出现不同步
+- 后续 ReactFlow node 外层也引入新的裁切宿主
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- 在 `WidgetWrapper` 的 root resize 预览链路中：
+  - 继续给 `widget-wrapper` 写入临时 `width/min-width`
+  - 同步给最近的 `.project-theme-scope--inline` 写入同样的临时宽度
+  - pointer end / unmount 时清理这组 preview 样式
+
+#### 修复后回填项
+
+- 根因确认：live preview 宽度没有同步到带 `contain-paint` 的主题宿主，导致预览绘制区域仍按旧宽度裁切
+- 实际改动文件清单：
+  - `src/builder/WidgetWrapper.tsx`
+- 验证方式：
+  - Playwright/CDP：mid-drag 时 `wrapperStyleWidth=684px`、`hostStyleWidth=684px`
+  - Playwright/CDP：mid-drag 时 `wrapperWidth=684`、`hostWidth=684`，而 ReactFlow node 仍可保持旧宽度 `504`
+  - Playwright/CDP：pointer up 后 `wrapperStyleWidth=''`、`hostStyleWidth=''`，最终 layout 落地为 `w=24`
+  - 截图留档：`temp/captures/root-resize-mid-fixed.png`
+
+#### 更新日志
+
+- `2026-04-18`：发现 root card shell 拉宽预览时被裁切，初步怀疑不是实时渲染
+- `2026-04-18`：用 Playwright/CDP 定位到 `ProjectThemeScope(contain-paint)` 未同步预览宽度
+- `2026-04-18`：补齐 preview host 宽度同步与清理逻辑，浏览器复测通过
+
+---
+
+### 17. Card Shell 根层缩放柄只能横向拉宽
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-18`
+- 最近更新时间：`2026-04-18`
+- 来源：`src/builder/WidgetWrapper.tsx`
+
+#### 现象
+
+- root `Card Shell` 右下角缩放柄只能改变宽度
+- 鼠标向下拖动时，card shell 高度没有跟随变化
+- 这和 `sample` 中 panel 作为 RGL item 时天然支持宽高双向 resize 的行为不一致
+
+#### 当前判断
+
+- 当前项目 root Kit Studio 底板使用 ReactFlow，不是 sample 的根层 RGL
+- 因此 root card shell 不能直接获得 RGL 的原生宽高 resize，需要 `WidgetWrapper` 自己把右下角 handle 转成 root layout 的 `w/h`
+- 之前实现只计算 `deltaX -> w`，没有计算 `deltaY -> h`
+
+#### 相关文件
+
+- `src/builder/WidgetWrapper.tsx`
+- `src/components/KitFactoryBoard.tsx`
+- `src/components/NestedCanvas.tsx`
+
+#### 影响范围
+
+- Kit Studio 根层 `Card Shell` 手动调整高度
+- Card shell 后续 header/footer/scrollbar/padding 调试
+- 与 sample panel resize 行为的体验一致性
+
+#### 当前处理决定
+
+- 保留 root ReactFlow 底板结构
+- 不重写为根层 RGL
+- 只在现有 root resize 预览链路中补齐纵向高度计算
+- 内部 padding 规则不做改动，继续保持：
+  - 水平：`paddingLeft / paddingRight + linkHorizontalPadding`
+  - 垂直：`paddingTop / paddingBottom + linkVerticalPadding`
+
+#### 重开条件
+
+- 缩放柄再次只能改宽不能改高
+- root card shell 高度预览被裁切
+- 垂直 padding 在 resize 后出现 top/bottom 不对等
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- 在 root resize session 中记录：
+  - `startY`
+  - `startHeightPx`
+  - `pixelPerRow`
+  - `minRows`
+  - `lastRows`
+  - `lastHeightPx`
+- pointer move 时同步计算：
+  - `deltaX -> nextCols`
+  - `deltaY -> nextRows`
+- drag preview 阶段同步写入：
+  - `widget-wrapper width/height/min-width/min-height`
+  - `.project-theme-scope--inline width/height/min-width/min-height`
+- pointer up 时一次性写回 root layout：
+  - `{ w: nextCols, h: nextRows }`
+
+#### 修复后回填项
+
+- 根因确认：root card shell 不是 RGL item，现有自定义 handle 只把 `deltaX` 写回 `w`，没有把 `deltaY` 写回 `h`
+- 实际改动文件清单：
+  - `src/builder/WidgetWrapper.tsx`
+- 验证方式：
+  - Playwright/CDP：从 `w=18/h=12` 斜向拖拽到 mid-drag，`wrapperStyleWidth=564px`、`wrapperStyleHeight=396px`
+  - Playwright/CDP：同一时刻 `.project-theme-scope--inline` 同步为 `hostStyleWidth=564px`、`hostStyleHeight=396px`
+  - Playwright/CDP：pointer up 后 root layout 落地为 `w=20/h=18`
+  - Playwright/CDP：padding 验证 `paddingTop=20px`、`paddingBottom=20px`、`paddingLeft=20px`、`paddingRight=20px`
+  - `npm run lint -- --pretty false`
+  - `npm run build`
+
+#### 更新日志
+
+- `2026-04-18`：对照 sample 确认 panel resize 应支持宽高双向
+- `2026-04-18`：补齐 root resize 纵向计算、预览样式同步与 layout `h` 写回
+- `2026-04-18`：浏览器验证通过，并确认垂直 padding 仍和水平 padding 使用同一套联动规则
+
+---
+
+### 18. Card Shell 底部 padding 未贴齐卡壳底边
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-18`
+- 最近更新时间：`2026-04-20`
+- 来源：`src/components/NestedCanvas.tsx`
+
+#### 现象
+
+- root `Card Shell` 被手动拉高后，卡内底部 padding 看起来不对
+- 实际表现不是 `paddingBottom` 数值没写入，而是 compact 模式下的 nested canvas 没有撑满 card body
+- 因此底部 padding 只停留在内容宿主自身的底边，没有贴到整个 card shell 底边
+- 二次复查发现：`scrollable=false` 自动高度模式下，非空内容仍会被默认 `minH=8` 和 compact drop-zone 最小高度影响，导致底部视觉间距不能像右侧 padding 一样按数值实时贴合
+
+#### 当前判断
+
+- 这是 `compact + scrollable=true` 下的高度承载问题
+- 旧实现里 nested canvas host 使用 `min-h-full`，会按内容高度停住，而不是随 card body 一起拉满
+- Playwright/CDP 复现时：
+  - scroll body 高度 `526px`
+  - nested canvas host 高度只有 `248px`
+  - host 底边距离 scroll 底边还有 `278px`
+- 所以用户看到的是“底部 padding 不对”，本质是底部画布宿主没贴到底
+- 二次根因补充：
+  - `scrollable=false` 时，父级 root layout 的默认 `minH=8` 会阻止 card shell 按内容高度向下收敛
+  - `compactDropZoneMinHeight` 原本对空卡与非空卡都生效，非空内容较少时会额外制造一段底部空白
+  - 右侧 padding 已经按 `gridCanvasWidth = canvasWidth - paddingLeft - paddingRight` 实时计算；底部也需要用真实内容高度反推 card shell 高度，而不是继续混入默认 drop-zone 高度
+
+#### 相关文件
+
+- `src/components/NestedCanvas.tsx`
+- `src/builder/registry.tsx`
+
+#### 影响范围
+
+- Kit Studio 中高卡壳的底部 padding 观感
+- 卡内底部空白区的拖放/落点预期
+- card shell 的纵向 spacing 认知一致性
+
+#### 当前处理决定
+
+- 不改四边 padding 数据结构
+- 不改 `scrollable=false` 的 auto-grow 算法
+- 只修正 `compact + scrollable=true` 时 nested canvas 的高度承载方式
+
+#### 重开条件
+
+- 再次出现 card shell 拉高后，nested canvas 只停在内容高度
+- 底部空白区仍不属于卡内画布
+- `scrollable=false` 的 auto-grow 被新逻辑误伤
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- 对 `compact + scrollable=true`：
+  - 用 `ResizeObserver` 读取 card body 的可视高度
+  - 将该高度只作为 outer host / inner `GridLayout` 的最小高度
+  - 保持 `GridLayout.autoSize=true`，让内容超出时继续自动撑开并触发滚动条
+- 对 `scrollable=false`：
+  - 保持原来的 `min-h-full + autoSize`，继续按内容自动撑高
+- 二次修正：
+  - 非空 card 使用真实 `layoutMaxY` 计算内部 grid 内容高度
+  - `compactDropZoneMinHeight` 只作为空 card 的可投放区域，不再压住已有控件的底部 padding
+  - 自动高度写回 root layout 时允许下调过高的 `minH`，但不把 `minH` 上调到内容高度，避免之后开启 scrollbar 时被内容高度锁死
+
+#### 修复后回填项
+
+- 根因确认：底部 padding 数值本身正确，但 compact nested canvas 在可滚动模式下没有填满 card body，导致 paddingBottom 没贴齐 card shell 底边
+- 二次根因确认：自动高度模式下混入了 root 默认 `minH` 与非空卡的 drop-zone 最小高度，导致底部实际间距不能像右侧 padding 一样由配置值直接决定
+- 实际改动文件清单：
+  - `src/components/NestedCanvas.tsx`
+- 验证方式：
+  - Playwright/CDP（修复前）：`scrollHeight=526`、`hostHeight=248`、`hostAtScrollBottom=278`
+  - Playwright/CDP（修复后）：`scrollHeight=526`、`hostHeight=526`、`hostAtScrollBottom=0`
+  - Playwright/CDP：内容超出时 `clientHeight=262`、`scrollHeight=1064`、`hasScrollbar=true`
+  - Playwright/CDP：`paddingTop=20px`、`paddingBottom=40px`
+  - Playwright/CDP：`scrollable=false` 回归下仍保持 `visualTopGap=20`、`visualBottomGap=40`
+  - Playwright/CDP（二次修复）：单个默认高度控件 `paddingBottom=9px` 时，`bottomFooter=9`、`bottomHost=9`、`right=10`
+  - Playwright/CDP（二次修复）：同一控件改为 `paddingBottom=30px` 后，`bottomFooter=30`、`bottomHost=30`，且 `minH` 只保留下调后的 `7.7272727272727275`
+  - Playwright/CDP（二次修复）：三控件场景 `paddingBottom=9px` 时，`bottomFooter=9`、`hostToFooter=0`、`right=10`
+  - Playwright/CDP（二次修复）：scrollbar 溢出场景滚动到底后，`paddingBottom=30px` 对应 `bottomFooter=30`、`bottomHost=30`
+  - 截图留档：
+    - `temp/captures/panel-bottom-padding-check.png`
+    - `temp/captures/panel-bottom-padding-fixed.png`
+  - `npm run lint -- --pretty false`
+  - `npm run build`
+
+#### 更新日志
+
+- `2026-04-18`：定位到“底部 padding 不对”实际是 nested canvas 没撑满 card body
+- `2026-04-18`：修正 compact scrollable card shell 的 host / GridLayout 高度承载
+- `2026-04-18`：浏览器回归确认 `scrollable=false` 未受影响
+- `2026-04-20`：修正前次 `h-full + autoSize=false` 方案导致默认滚动条和内容自动撑开失效的问题，改为测量 card body 高度并仅作为最小高度
+- `2026-04-20`：二次修复 `scrollable=false` 下 root 默认 `minH` 与非空 drop-zone 最小高度导致的底部 padding 不实时贴合问题；无头浏览器、lint、build 均通过
+
+---
+
+### 19. Card Shell 启用滚动条后左右 padding 偏移
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-20`
+- 最近更新时间：`2026-04-20`
+- 来源：`src/builder/registry.tsx` / `src/components/NestedCanvas.tsx`
+
+#### 现象
+
+- `Card Shell` 配置相同的 `Padding Left / Padding Right`
+- `scrollable=false` 时，控件到 card body 左右内缘的可视距离等于配置值
+- `scrollable=true` 但内容高度足够、滚动条未出现时，右侧 padding 不应提前计算滚动条宽度
+- 只有内容真实溢出、滚动条现身时，右侧外缘才应多出滚动条宽度；`paddingRight` 本身仍表示控件到滚动条左边缘的距离
+
+#### 当前判断
+
+- 不是 Inspector 写值问题，也不是 `paddingLeft / paddingRight` 本身没生效
+- card body 使用 `scrollbar-gutter: stable both-edges` 时，即使没有真实滚动条，也会左右各预留 gutter
+- 这会把“启用滚动能力”误当成“滚动条已经出现”，导致无溢出状态下也提前扣掉滚动条空间
+- 正确语义应使用浏览器默认 `scrollbar-gutter: auto`：无溢出不预留；真实溢出时再由滚动条自然占位
+
+#### 相关文件
+
+- `src/builder/registry.tsx`
+- `src/components/NestedCanvas.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- Kit Studio 中启用滚动条的 card shell
+- 左右 padding 的视觉一致性
+- 启用 / 禁用 scrollbar 时控件宽度和落点的稳定性
+
+#### 当前处理决定
+
+- 移除 `scrollbar-gutter: stable both-edges`
+- 不改四边 padding 数据模型
+- 不再对 nested canvas host 做 both-edges 横向补偿
+- 让真实滚动条出现时自然减少 body 的 `clientWidth`，使 host 右边界停在滚动条左侧
+
+#### 重开条件
+
+- 启用滚动条后，左侧到 card body 内缘不是配置值
+- 启用滚动条后，右侧到滚动条左边缘不是配置值
+- 无真实滚动条时，右侧仍然提前计入滚动条宽度
+- 真实滚动条出现后，右侧 padding 被算到 card body 外缘而不是滚动条左边缘
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- 删除 card body 的 `scrollbarGutter: stable both-edges`
+- 保持 `overflow-y-auto`：
+  - 无溢出时不出现滚动条，`offsetWidth === clientWidth`
+  - 有溢出时滚动条自然出现，`clientWidth` 扣除滚动条宽度
+- nested canvas host 继续 `w-full`，因此：
+  - 无滚动条时 `paddingRight` 到 card body 外缘
+  - 有滚动条时 `paddingRight` 到滚动条左边缘
+
+#### 修复后回填项
+
+- 根因确认：`scrollbar-gutter: stable both-edges` 会在无真实滚动条时也预留 gutter，违背“只有滚动条现身才计算滚动条宽度”的产品语义
+- 实际改动文件清单：
+  - `src/builder/registry.tsx`
+  - `src/components/NestedCanvas.tsx`
+  - `docs/debug-record.md`
+- 验证方式：
+  - Playwright/CDP（修复前）：`scrollable=false` 时 `leftFromBody=20 / rightFromBody=20`
+  - Playwright/CDP（修复前）：`scrollable=true` 时 `leftFromBody=26 / rightFromBody=26`
+  - Playwright/CDP（最终修复）：`scrollable=false` 时 `gutterTotal=0 / leftToBody=20 / rightToBodyOuter=20`
+  - Playwright/CDP（最终修复）：`scrollable=true` 但无真实滚动条时 `gutterTotal=0 / leftToBody=20 / rightToBodyOuter=20`
+  - Playwright/CDP（最终修复）：`scrollable=true` 且真实滚动条出现时 `gutterTotal=6 / leftToBody=20 / rightToScrollbarEdge=20 / rightToBodyOuter=26`
+  - `npm run lint -- --pretty false`
+  - `npm run build`
+
+#### 更新日志
+
+- `2026-04-20`：定位滚动条开关引发的左右 padding 偏差来自 `stable both-edges` gutter
+- `2026-04-20`：按实际 gutter 对 nested canvas host 做反向补偿，CDP、lint、build 均通过
+- `2026-04-20`：根据产品语义修正为只补偿左侧 fake gutter；右侧 padding 以控件到滚动条左边缘为准，不包含滚动条宽度
+- `2026-04-20`：最终修正为移除稳定 gutter；只有滚动条真实出现时才由浏览器自然扣除滚动条宽度
+
+---
+
 ## 后续新增记录模板
 
 复制以下模板追加：

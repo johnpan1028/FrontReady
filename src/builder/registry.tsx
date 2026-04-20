@@ -16,6 +16,14 @@ type NestedCanvasComponentProps = {
   id: string;
   compact?: boolean;
   layoutMode?: 'grid' | 'flex-row' | 'flex-col';
+  paddingLeft?: number;
+  paddingRight?: number;
+  paddingTop?: number;
+  paddingBottom?: number;
+  paddingX?: number;
+  paddingY?: number;
+  gap?: number;
+  scrollable?: boolean;
 };
 
 let NestedCanvasComponent: React.FC<NestedCanvasComponentProps> | null = null;
@@ -142,25 +150,63 @@ export const WidgetRegistry: Record<string, React.FC<any>> = {
   ),
 
   // ── CONTAINERS ───────────────────────────────────────────────────────
-  panel: ({ id, title, showHeader = true, chrome }) => (
-    <Card
-      surface={chrome === 'transparent' ? 'transparent' : 'default'}
-      elevation={chrome === 'transparent' ? 'none' : 'default'}
-      className="flex h-full w-full flex-col overflow-hidden"
-    >
-      {showHeader !== false && title ? (
-        <div className="flex h-8 shrink-0 items-center border-b border-hr-border/70 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-hr-muted">
-          <span className="truncate">{title}</span>
-        </div>
-      ) : null}
-      <div
-        className={cn('min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto p-1', chrome === 'shadcn-card' && 'p-6')}
-        style={{ scrollbarGutter: 'stable both-edges' }}
+  panel: ({
+    id,
+    title,
+    showHeader = true,
+    showFooter = false,
+    footerText,
+    scrollable = true,
+    paddingLeft,
+    paddingRight,
+    paddingTop,
+    paddingBottom,
+    gap,
+    layoutMode = 'grid',
+    chrome,
+  }) => {
+    return (
+      <Card
+        surface={chrome === 'transparent' ? 'transparent' : 'default'}
+        elevation={chrome === 'transparent' ? 'none' : 'default'}
+        className="nowheel flex h-full w-full flex-col overflow-hidden"
       >
-        {NestedCanvasComponent && <NestedCanvasComponent id={id} compact />}
-      </div>
-    </Card>
-  ),
+        {showHeader !== false && title ? (
+          <div className="flex h-8 shrink-0 items-center border-b border-hr-border/70 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-hr-muted">
+            <span className="truncate">{title}</span>
+          </div>
+        ) : null}
+        <div
+          className={cn(
+            'nowheel min-h-0 w-full flex-1 overflow-x-hidden',
+            scrollable === false ? 'overflow-y-hidden' : 'overflow-y-auto',
+          )}
+          style={{
+            overscrollBehavior: 'contain',
+          }}
+        >
+          {NestedCanvasComponent && (
+            <NestedCanvasComponent
+              id={id}
+              compact
+              layoutMode={layoutMode}
+              paddingLeft={paddingLeft}
+              paddingRight={paddingRight}
+              paddingTop={paddingTop}
+              paddingBottom={paddingBottom}
+              gap={gap}
+              scrollable={scrollable}
+            />
+          )}
+        </div>
+        {showFooter === true ? (
+          <div className="flex h-8 shrink-0 items-center border-t border-hr-border/70 px-3 text-[11px] text-hr-muted">
+            <span className="truncate">{footerText || 'Footer'}</span>
+          </div>
+        ) : null}
+      </Card>
+    );
+  },
   canvas: ({ id, layoutMode }) => (
     <div className="w-full h-full border border-dashed border-hr-border/50 rounded-lg bg-hr-panel/30 overflow-hidden relative group/canvas-widget">
       <div className="pointer-events-none absolute top-1 left-1/2 z-10 h-1.5 w-8 -translate-x-1/2 rounded-full bg-hr-border opacity-0 transition-opacity group-hover/canvas-widget:opacity-100" />
