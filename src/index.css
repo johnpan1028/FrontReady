@@ -391,6 +391,22 @@ body {
   visibility: hidden;
 }
 
+[data-nested-canvas-host='true'][data-kit-cross-card-preview-source='true'] .react-grid-item.react-grid-placeholder {
+  opacity: 0 !important;
+  visibility: hidden;
+}
+
+.kit-cross-card-preview-layer {
+  position: absolute;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.kit-cross-card-drop-preview {
+  position: absolute !important;
+  margin: 0;
+}
+
 /* RGL internal drag handle */
 .react-grid-item.nested-grid-item [data-rgl-drag-handle] {
   position: absolute;

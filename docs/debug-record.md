@@ -411,7 +411,7 @@
 - 状态：`resolved`
 - 优先级：`high`
 - 首次记录时间：`2026-04-15`
-- 最近更新时间：`2026-04-17`
+- 最近更新时间：`2026-04-20`
 - 来源：`Kit Studio` 实际操作反馈
 
 #### 现象
@@ -428,10 +428,19 @@
 - 第二轮回访后确认还存在一条遗漏链路：
   - 卡内控件拖回 `root` 后，会变成 root leaf node
   - 这类 root leaf node 没有重新进入“可跨层拖拽”的手柄模式，导致能拖出但不能再拖回卡片
+- 第三轮回访补充了一条同类边界：
+  - 控件从 `A` 卡拖向 `B` 卡时，释放点如果命中的是 nested canvas / placeholder 等中间 DOM
+  - 仅依赖 `elementFromPoint(...)->祖先容器` 的目标卡判断，存在漏命中风险
+- 第四轮回访补充了一条预览层问题：
+  - `A -> B` 的实际落地虽然已经成立
+  - 但拖拽过程中，旧卡 `A` 的 placeholder 仍可见，而目标卡 `B` 没有承接对应预览
+  - 导致视觉上像是影子还停留在老卡
 - 修复后确认：
   - `root -> card` 可把底板控件归入卡片
   - `card -> root` 可把卡片内控件拖回底板
   - `card -> root -> card` 闭环重新成立
+  - `card A -> card B` 直接转场也重新纳入同一套释放点判定
+  - `card A -> card B` 的拖拽预览也会随目标卡切换，不再残留在旧卡
 
 #### 相关文件
 
@@ -455,6 +464,12 @@
 - 卡片容器捕获 drop 后可直接把控件归入卡片
 - 底板 drop 只对真正落在 card / container 区域内的释放点让出处理权
 - 增加 release-point fallback：即使 card wrapper 漏接一次 drop，也会在松手时按释放位置补做一次重挂载判断
+- 本轮补充 release-point container fallback：
+  - 先走原有 `elementFromPoint` 容器命中
+  - 失败时再按释放坐标扫描可见 card 容器 bounding box，兜底锁定目标卡
+- 本轮继续补充 preview handoff：
+  - 当控件从 `A` 卡拖向 `B` 卡时，源卡 placeholder 进入隐藏态
+  - 目标卡按当前落地语义显示自定义 cross-card preview
 
 #### 重开条件
 
@@ -471,6 +486,9 @@
   - 卡片 wrapper 增加捕获级 drop，把来自 root 的控件直接 `moveWidget(..., cardId)`
   - `NestedCanvas` 增加原生 drop fallback，避免 RGL 未接住时丢失 drop
   - `WidgetWrapper` 在 `dragend` 时按释放位置追加一次 container 命中判断，补齐“松手位置决定内外约束”的分支
+  - `NestedCanvas` 在卡内控件拖拽时新增目标卡坐标兜底命中，避免 `A -> B` 直接转场因中间 DOM 命中不稳定而漏判
+  - `NestedCanvas` 新增 cross-card preview 事件与目标卡预览渲染
+  - 源卡在 cross-card 过程中隐藏自身 placeholder，避免旧预览残留
 
 #### 修复后回填项
 
@@ -483,9 +501,15 @@
   - `src/builder/WidgetWrapper.tsx`
   - `src/components/KitFactoryBoard.tsx`
   - `src/components/NestedCanvas.tsx`
+  - `src/index.css`
 - root -> card 回归结果：通过
 - card -> root 回归结果：通过
 - card -> root -> card 回归结果：已通过 Chrome DevTools MCP 脚本化拖拽回归验证
+- card A -> card B 回归结果：已通过浏览器实测；同时回归验证 `root -> A`、`A -> B`、`B -> root` 三段链路均保持正常
+- card A -> card B 预览回归结果：
+  - 浏览器实测中，源卡 placeholder 为隐藏态
+  - 目标卡 `B` 显示正确的 cross-card preview
+  - 实际落地结果保持不变
 
 #### 更新日志
 
@@ -493,6 +517,9 @@
 - `2026-04-15`：修复完成，已用实际 DOM 拖拽事件验证 `root -> card -> root` 双向链路
 - `2026-04-17`：二次回访确认 root leaf control 仍存在“能拖出不能再拖入”的遗漏链路，重新进入修复
 - `2026-04-17`：补齐 root leaf control 的智能拖拽手柄与 release-point fallback，并通过 Chrome DevTools MCP 脚本化拖拽验证 `card -> root -> card`
+- `2026-04-20`：按“控件可直接从 A 卡拖出进入 B 卡”的回访要求，再次检查跨卡转场释放点判定
+- `2026-04-20`：在 `NestedCanvas` 增加目标卡坐标兜底命中，并用浏览器实测回归 `root -> A -> B -> root`
+- `2026-04-20`：继续回访发现 `A -> B` 时预览仍残留在源卡；补充 cross-card preview handoff，并通过浏览器实测确认预览已转移到目标卡
 
 ---
 

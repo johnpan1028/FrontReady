@@ -41,12 +41,25 @@ const ROOT_CONTROL_ROW_HEIGHT = 18;
 const ROOT_NODE_GAP = 12;
 const KIT_ROOT_DROP_PREVIEW_EVENT = 'kit-root-drop-preview';
 const KIT_ROOT_PREVIEW_ACTIVE_ATTR = 'data-kit-root-preview-active';
+const KIT_CROSS_CARD_PREVIEW_EVENT = 'kit-cross-card-drop-preview';
+const KIT_CROSS_CARD_PREVIEW_SOURCE_ATTR = 'data-kit-cross-card-preview-source';
 const COMPACT_GRID_COMPACTOR = getCompactor('vertical');
 
 type RootBoardWidgetMeta = {
   type: WidgetType;
   props?: Record<string, unknown>;
 };
+
+type CrossCardPreviewEventDetail =
+  | { action: 'clear' }
+  | {
+      action: 'show';
+      sourceContainerId: string;
+      targetContainerId: string;
+      sourceParentId?: string | null;
+      sourceLayoutItem?: Partial<GridLayoutItem> | null;
+      widgetMeta?: { type?: WidgetType; props?: Record<string, unknown> };
+    };
 
 const toGridNumber = (value: unknown, fallback = 0) => {
   const next = Number(value);
@@ -179,6 +192,54 @@ const findClosestContainerDropTarget = (source: EventTarget | Element | null) =>
   }
 
   return null;
+};
+
+const findContainerDropTargetAtPoint = (
+  clientX: number,
+  clientY: number,
+  ignoreWidgetId?: string,
+) => {
+  const directTarget = findClosestContainerDropTarget(document.elementFromPoint(clientX, clientY));
+  if (directTarget && directTarget.widgetId !== ignoreWidgetId) {
+    return directTarget;
+  }
+
+  const fallbackTargets = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-builder-node-id][data-builder-node-type]'),
+  )
+    .map((element) => {
+      const widgetId = element.getAttribute('data-builder-node-id');
+      const widgetType = element.getAttribute('data-builder-node-type');
+      if (!widgetId || !widgetType || widgetId === ignoreWidgetId || !isContainerWidget(widgetType as WidgetType)) {
+        return null;
+      }
+
+      if (!isPointInsideElement(element, clientX, clientY)) {
+        return null;
+      }
+
+      const bounds = element.getBoundingClientRect();
+      return {
+        element,
+        widgetId,
+        widgetType: widgetType as WidgetType,
+        area: bounds.width * bounds.height,
+      };
+    })
+    .filter((target): target is {
+      element: HTMLElement;
+      widgetId: string;
+      widgetType: WidgetType;
+      area: number;
+    } => Boolean(target))
+    .sort((left, right) => left.area - right.area);
+
+  if (fallbackTargets.length === 0) {
+    return null;
+  }
+
+  const [{ area: _area, ...target }] = fallbackTargets;
+  return target;
 };
 
 const parseViewportTransform = (transform: string | null | undefined) => {
@@ -361,6 +422,18 @@ const clearKitRootDropPreview = () => {
   }));
 };
 
+const clearKitCrossCardPreview = () => {
+  window.dispatchEvent(new CustomEvent(KIT_CROSS_CARD_PREVIEW_EVENT, {
+    detail: { action: 'clear' } satisfies CrossCardPreviewEventDetail,
+  }));
+};
+
+const showKitCrossCardPreview = (detail: Extract<CrossCardPreviewEventDetail, { action: 'show' }>) => {
+  window.dispatchEvent(new CustomEvent(KIT_CROSS_CARD_PREVIEW_EVENT, {
+    detail,
+  }));
+};
+
 const showKitRootDropPreview = (
   widgetId: string,
   widgetType: WidgetType,
@@ -425,6 +498,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
   const { width, containerRef, mounted } = useContainerWidth({ trackHeight: false, measureMode: 'layout' });
   const [nativeDropHost, setNativeDropHost] = useState<HTMLDivElement | null>(null);
   const [compactCanvasViewportHeight, setCompactCanvasViewportHeight] = useState(0);
+  const [crossCardPreviewItem, setCrossCardPreviewItem] = useState<GridLayoutItem | null>(null);
   const rootPreviewActiveRef = useRef(false);
   const externalDragProxyRef = useRef<HTMLElement | null>(null);
   const scopedWidgets = scope === 'kit' ? kitStudioWidgets : widgets;
@@ -513,10 +587,27 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     nativeDropHost.removeAttribute(KIT_ROOT_PREVIEW_ACTIVE_ATTR);
   }, [nativeDropHost]);
 
+  const setCrossCardPreviewSourceActive = useCallback((active: boolean) => {
+    if (!nativeDropHost) return;
+
+    if (active) {
+      nativeDropHost.setAttribute(KIT_CROSS_CARD_PREVIEW_SOURCE_ATTR, 'true');
+      return;
+    }
+
+    nativeDropHost.removeAttribute(KIT_CROSS_CARD_PREVIEW_SOURCE_ATTR);
+  }, [nativeDropHost]);
+
   const clearExternalRootPreview = useCallback(() => {
     setRootPreviewActive(false);
     clearKitRootDropPreview();
   }, [setRootPreviewActive]);
+
+  const clearCrossCardPreview = useCallback(() => {
+    setCrossCardPreviewSourceActive(false);
+    setCrossCardPreviewItem(null);
+    clearKitCrossCardPreview();
+  }, [setCrossCardPreviewSourceActive]);
 
   const cleanupExternalDragProxy = useCallback(() => {
     if (externalDragProxyRef.current?.parentNode) {
@@ -572,6 +663,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
 
   useEffect(() => () => {
     nativeDropHost?.removeAttribute(KIT_ROOT_PREVIEW_ACTIVE_ATTR);
+    nativeDropHost?.removeAttribute(KIT_CROSS_CARD_PREVIEW_SOURCE_ATTR);
     cleanupExternalDragProxy();
   }, [cleanupExternalDragProxy, nativeDropHost]);
 
@@ -742,9 +834,66 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     };
   }, [activeCompactContentCols, resolveIncomingCompactRows]);
 
+  useEffect(() => {
+    const handleCrossCardPreviewEvent = (event: Event) => {
+      const detail = (event as CustomEvent<CrossCardPreviewEventDetail>).detail;
+      if (!detail || detail.action === 'clear') {
+        setCrossCardPreviewItem(null);
+        return;
+      }
+
+      if (detail.sourceContainerId === id || detail.targetContainerId !== id || layoutMode !== 'grid') {
+        setCrossCardPreviewItem(null);
+        return;
+      }
+
+      const targetChildLayout = scopedLayouts[id] ?? [];
+      const nextChildY = targetChildLayout.reduce(
+        (maxY, item) => Math.max(maxY, Number(item.y ?? 0) + Number(item.h ?? 1)),
+        0,
+      );
+      const sourceLayoutItem = detail.sourceLayoutItem ?? undefined;
+      const fallbackWidth = Math.max(1, Number(sourceLayoutItem?.w ?? 4));
+      const fallbackHeight = Math.max(1, Number(sourceLayoutItem?.h ?? 4));
+
+      const nextPreviewItem = compactGridRulesEnabled
+        ? {
+            i: '__cross-card-preview__',
+            ...resolveCompactIncomingLayout(
+              {
+                x: 0,
+                y: nextChildY,
+                w: fallbackWidth,
+                h: fallbackHeight,
+                minW: sourceLayoutItem?.minW,
+                minH: sourceLayoutItem?.minH,
+              },
+              sourceLayoutItem,
+              detail.widgetMeta,
+              detail.sourceParentId,
+            ),
+          }
+        : normalizeGridItem({
+            i: '__cross-card-preview__',
+            x: 0,
+            y: nextChildY,
+            w: fallbackWidth,
+            h: fallbackHeight,
+            minW: sourceLayoutItem?.minW,
+            minH: sourceLayoutItem?.minH,
+          });
+
+      setCrossCardPreviewItem(nextPreviewItem);
+    };
+
+    window.addEventListener(KIT_CROSS_CARD_PREVIEW_EVENT, handleCrossCardPreviewEvent as EventListener);
+    return () => window.removeEventListener(KIT_CROSS_CARD_PREVIEW_EVENT, handleCrossCardPreviewEvent as EventListener);
+  }, [compactGridRulesEnabled, id, layoutMode, resolveCompactIncomingLayout, scopedLayouts]);
+
   const handleDrop = (nextLayout: any[], item: any, e: any) => {
     cleanupExternalDragProxy();
     clearExternalRootPreview();
+    clearCrossCardPreview();
     if (e && typeof e.preventDefault === 'function') {
       e.preventDefault();
     }
@@ -852,6 +1001,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     event.stopPropagation();
     cleanupExternalDragProxy();
     clearExternalRootPreview();
+    clearCrossCardPreview();
 
     const movedWidgetId = event.dataTransfer?.getData('application/x-widget-id');
     const movedWidgetScope = (event.dataTransfer?.getData('application/x-builder-scope') as 'page' | 'kit' | '') || 'page';
@@ -922,6 +1072,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
 
   const handleDropDragOver = (e: any) => {
     clearExternalRootPreview();
+    clearCrossCardPreview();
     if (e && typeof e.preventDefault === 'function') {
       e.preventDefault();
     }
@@ -985,14 +1136,18 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
   ) => {
     cleanupExternalDragProxy();
     clearExternalRootPreview();
+    clearCrossCardPreview();
 
     const pointerEvent = event instanceof MouseEvent ? event : null;
 
     if (interaction === 'drag' && scope === 'kit' && newItem?.i && pointerEvent) {
       const movedWidgetId = String(newItem.i);
       const movedWidget = scopedWidgets[movedWidgetId];
-      const dropElement = document.elementFromPoint(pointerEvent.clientX, pointerEvent.clientY);
-      const targetContainer = findClosestContainerDropTarget(dropElement);
+      const targetContainer = findContainerDropTargetAtPoint(
+        pointerEvent.clientX,
+        pointerEvent.clientY,
+        movedWidgetId,
+      );
       const currentContainerElement = getCurrentContainerElement();
       const currentCardContainsDrop = currentContainerElement
         ? isPointInsideElement(currentContainerElement, pointerEvent.clientX, pointerEvent.clientY)
@@ -1075,42 +1230,93 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     const movedWidget = scopedWidgets[movedWidgetId];
     if (!movedWidget) {
       clearExternalRootPreview();
+      clearCrossCardPreview();
       return;
     }
 
-    const dropElement = document.elementFromPoint(event.clientX, event.clientY);
-    const targetElement = dropElement instanceof HTMLElement ? dropElement : null;
     const currentContainerElement = getCurrentContainerElement();
     const currentCardContainsDrop = currentContainerElement
       ? isPointInsideElement(currentContainerElement, event.clientX, event.clientY)
       : false;
     const pointerInsideNestedCanvas = isPointInsideAnyNestedCanvas(event.clientX, event.clientY);
-    const targetContainer = findClosestContainerDropTarget(targetElement);
-    const pointerInsideTargetContainer = targetContainer
-      ? isPointInsideElement(targetContainer.element, event.clientX, event.clientY)
-      : false;
+    const targetContainer = findContainerDropTargetAtPoint(
+      event.clientX,
+      event.clientY,
+      movedWidgetId,
+    );
 
     if (currentCardContainsDrop) {
+      cleanupExternalDragProxy();
+      clearExternalRootPreview();
+      clearCrossCardPreview();
+      return;
+    }
+
+    if (targetContainer && targetContainer.widgetId !== id) {
+      const sourceLayoutItem = scopedLayouts[movedWidget.parentId]?.find((layoutItem) => layoutItem.i === movedWidgetId);
+      setCrossCardPreviewSourceActive(true);
+      showKitCrossCardPreview({
+        action: 'show',
+        sourceContainerId: id,
+        targetContainerId: targetContainer.widgetId,
+        sourceParentId: movedWidget.parentId,
+        sourceLayoutItem: {
+          w: Number(newItem.w ?? sourceLayoutItem?.w ?? 4),
+          h: Number(newItem.h ?? sourceLayoutItem?.h ?? 4),
+          minW: sourceLayoutItem?.minW,
+          minH: sourceLayoutItem?.minH,
+        },
+        widgetMeta: {
+          type: movedWidget.type,
+          props: {
+            autoOccupyRow: movedWidget.props?.autoOccupyRow,
+          },
+        },
+      });
       cleanupExternalDragProxy();
       clearExternalRootPreview();
       return;
     }
 
-    if (pointerInsideNestedCanvas || pointerInsideTargetContainer) {
+    if (pointerInsideNestedCanvas || targetContainer) {
+      clearCrossCardPreview();
       cleanupExternalDragProxy();
       clearExternalRootPreview();
       return;
     }
 
     if (screenToKitBoardFlowPosition(event.clientX, event.clientY)) {
+      clearCrossCardPreview();
       updateExternalDragProxy(element);
       showExternalRootPreview(movedWidgetId, movedWidget.type, element, event.clientX, event.clientY);
       return;
     }
 
+    clearCrossCardPreview();
     cleanupExternalDragProxy();
     clearExternalRootPreview();
   };
+
+  const crossCardPreviewStyle = useMemo(() => {
+    if (!crossCardPreviewItem || layoutMode !== 'grid') return null;
+
+    const previewCols = compactGridRulesEnabled ? activeCompactCols : PROJECT_GRID_COLS.lg;
+    if (previewCols <= 0) return null;
+
+    const columnWidth = Math.max(1, (gridCanvasWidth - (Math.max(0, previewCols - 1) * safeGap)) / previewCols);
+    const width = (Math.max(1, Number(crossCardPreviewItem.w ?? 1)) * columnWidth)
+      + (Math.max(0, Number(crossCardPreviewItem.w ?? 1) - 1) * safeGap);
+    const height = (Math.max(1, Number(crossCardPreviewItem.h ?? 1)) * rowHeight)
+      + (Math.max(0, Number(crossCardPreviewItem.h ?? 1) - 1) * safeGap);
+    const x = Math.max(0, Number(crossCardPreviewItem.x ?? 0)) * (columnWidth + safeGap);
+    const y = Math.max(0, Number(crossCardPreviewItem.y ?? 0)) * (rowHeight + safeGap);
+
+    return {
+      width,
+      height,
+      transform: `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`,
+    } as React.CSSProperties;
+  }, [activeCompactCols, compactGridRulesEnabled, crossCardPreviewItem, gridCanvasWidth, layoutMode, rowHeight, safeGap]);
 
   if (layoutMode === 'flex-row' || layoutMode === 'flex-col') {
     const flexDir = layoutMode === 'flex-row' ? 'flex-row' : 'flex-col';
@@ -1172,6 +1378,22 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
       onMouseDown={(e) => e.stopPropagation()}
       ref={setCanvasHost}
     >
+      {crossCardPreviewStyle ? (
+        <div
+          className="kit-cross-card-preview-layer"
+          style={{
+            left: safePaddingLeft,
+            top: safePaddingTop,
+            width: gridCanvasWidth,
+            minHeight: compactGridContentMinHeight,
+          }}
+        >
+          <div
+            className="kit-cross-card-drop-preview react-grid-item react-grid-placeholder nested-grid-item"
+            style={crossCardPreviewStyle}
+          />
+        </div>
+      ) : null}
       {mounted && (compactGridRulesEnabled ? (
         <GridLayout
           className={cn(
