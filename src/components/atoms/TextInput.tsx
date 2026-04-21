@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import type { CSSProperties } from 'react';
 import { cn } from '../../utils/cn';
 
 export interface TextInputProps {
@@ -12,6 +13,9 @@ export interface TextInputProps {
   disabled?: boolean;
   hint?: string;
   labelSize?: 'xs' | 'sm';
+  labelTextStyle?: CSSProperties;
+  inputTextStyle?: CSSProperties;
+  hintTextStyle?: CSSProperties;
   onValueChange?: (value: string) => void;
 }
 
@@ -26,6 +30,9 @@ export function TextInput({
   disabled = false,
   hint,
   labelSize = 'xs',
+  labelTextStyle,
+  inputTextStyle,
+  hintTextStyle,
   onValueChange,
 }: TextInputProps) {
   const isField = chrome === 'field';
@@ -35,9 +42,15 @@ export function TextInput({
     <div className="flex flex-col gap-1.5 w-full h-full justify-center">
       {label ? (
         <div className="flex items-center justify-between gap-3">
-          <label htmlFor={inputId} className={cn('font-medium text-hr-text', labelSize === 'sm' ? 'text-sm' : 'text-xs')}>{label}</label>
+          <label
+            htmlFor={inputId}
+            className={cn('font-medium text-hr-text', labelSize === 'sm' ? 'text-sm' : 'text-xs')}
+            style={labelTextStyle}
+          >
+            {label}
+          </label>
           {labelAside ? (
-            <span className="text-xs font-normal text-hr-muted">{labelAside}</span>
+            <span className="text-xs font-normal text-hr-muted" style={labelTextStyle}>{labelAside}</span>
           ) : null}
         </div>
       ) : null}
@@ -67,9 +80,10 @@ export function TextInput({
           boxShadow: 'var(--builder-input-shadow)',
           paddingLeft: isField ? 'var(--theme-field-padding-x)' : 'var(--theme-input-padding-x)',
           paddingRight: isField ? 'var(--theme-field-padding-x)' : 'var(--theme-input-padding-x)',
+          ...inputTextStyle,
         }}
       />
-      {hint && <p className="text-xs text-hr-muted">{hint}</p>}
+      {hint && <p className="text-xs text-hr-muted" style={hintTextStyle}>{hint}</p>}
     </div>
   );
 }

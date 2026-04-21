@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { cn } from '../../utils/cn';
 
 export interface CheckboxOption {
@@ -13,6 +14,8 @@ export interface CheckboxGroupProps {
   direction?: 'horizontal' | 'vertical';
   disabled?: boolean;
   value?: string[] | string;
+  labelTextStyle?: CSSProperties;
+  optionTextStyle?: CSSProperties;
   onValueChange?: (value: string[] | string) => void;
 }
 
@@ -22,13 +25,24 @@ const DEFAULT_OPTIONS: CheckboxOption[] = [
   { label: 'Option C', value: 'c' },
 ];
 
-export function CheckboxGroup({ label, mode = 'checkbox', name = 'group', options = DEFAULT_OPTIONS, direction = 'vertical', disabled = false, value, onValueChange }: CheckboxGroupProps) {
+export function CheckboxGroup({
+  label,
+  mode = 'checkbox',
+  name = 'group',
+  options = DEFAULT_OPTIONS,
+  direction = 'vertical',
+  disabled = false,
+  value,
+  labelTextStyle,
+  optionTextStyle,
+  onValueChange,
+}: CheckboxGroupProps) {
   const currentValues = Array.isArray(value) ? value : [];
   const currentValue = typeof value === 'string' ? value : '';
 
   return (
     <div className="flex flex-col gap-2 w-full h-full justify-center">
-      {label && <span className="text-xs font-medium text-hr-text">{label}</span>}
+      {label && <span className="text-xs font-medium text-hr-text" style={labelTextStyle}>{label}</span>}
       <div className={cn('flex gap-3 flex-wrap', direction === 'vertical' && 'flex-col')}>
         {options.map((opt) => (
           <label
@@ -37,6 +51,7 @@ export function CheckboxGroup({ label, mode = 'checkbox', name = 'group', option
               'flex items-center gap-2 text-sm text-hr-text cursor-pointer select-none',
               disabled && 'opacity-50 cursor-not-allowed'
             )}
+            style={optionTextStyle}
           >
             <input
               type={mode}

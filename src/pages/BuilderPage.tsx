@@ -116,6 +116,9 @@ const getRelationFallbackLabel = (links: BuilderPageLink[], link: BuilderPageLin
 };
 
 type InspectorMode = 'project' | 'theme' | 'page' | 'widget' | 'relation' | 'account';
+type KitRootResizePreviewEventDetail =
+  | { action: 'update'; widgetId: string; cols: number; rows: number }
+  | { action: 'clear'; widgetId?: string };
 
 export function BuilderPage() {
   const { notify, confirm } = useFeedback();
@@ -132,6 +135,11 @@ export function BuilderPage() {
   const [pageBoardFitRequestKey, setPageBoardFitRequestKey] = useState(0);
   const [kitStudioFitRequestKey, setKitStudioFitRequestKey] = useState(0);
   const [kitStudioFocusRequestKey, setKitStudioFocusRequestKey] = useState(0);
+  const [kitRootResizePreview, setKitRootResizePreview] = useState<{
+    widgetId: string;
+    cols: number;
+    rows: number;
+  } | null>(null);
   const [projectDraftName, setProjectDraftName] = useState('');
   const [projectDraftArchetype, setProjectDraftArchetype] = useState<ProjectArchetype>('dashboard-workspace');
   const [projectDraftPlatform, setProjectDraftPlatform] = useState<TargetPlatform>('desktop-web');
@@ -251,6 +259,27 @@ export function BuilderPage() {
     window.addEventListener('mousedown', handlePointerDown);
     return () => window.removeEventListener('mousedown', handlePointerDown);
   }, [isVersionMenuOpen]);
+
+  useEffect(() => {
+    const handleKitRootResizePreview = (event: Event) => {
+      const detail = (event as CustomEvent<KitRootResizePreviewEventDetail>).detail;
+      if (!detail || detail.action === 'clear') {
+        setKitRootResizePreview((current) => (
+          !detail?.widgetId || current?.widgetId === detail.widgetId ? null : current
+        ));
+        return;
+      }
+
+      setKitRootResizePreview({
+        widgetId: detail.widgetId,
+        cols: detail.cols,
+        rows: detail.rows,
+      });
+    };
+
+    window.addEventListener('kit-root-resize-preview', handleKitRootResizePreview);
+    return () => window.removeEventListener('kit-root-resize-preview', handleKitRootResizePreview);
+  }, []);
 
   const themeCatalog = useMemo(() => getBuilderThemeCatalog(themeLibrary), [themeLibrary]);
   const projectThemeIds = useMemo(() => themeLibrary.map((theme) => theme.id), [themeLibrary]);
@@ -427,6 +456,20 @@ export function BuilderPage() {
   };
   const selectedWidget = activeSelectedId ? activeWidgets[activeSelectedId] : null;
   const selectedLayoutItem = selectedWidget ? activeLayouts[selectedWidget.parentId]?.find(l => l.i === activeSelectedId) : null;
+  const selectedLayoutItemWithResizePreview = (
+    activeWorkspaceScope === 'kit'
+    && selectedWidget
+    && selectedWidget.parentId === 'root'
+    && selectedLayoutItem
+    && kitRootResizePreview
+    && kitRootResizePreview.widgetId === selectedWidget.id
+  )
+    ? {
+        ...selectedLayoutItem,
+        w: kitRootResizePreview.cols,
+        h: kitRootResizePreview.rows,
+      }
+    : selectedLayoutItem;
   const selectedParentWidget = selectedWidget && selectedWidget.parentId !== 'root'
     ? activeWidgets[selectedWidget.parentId] ?? null
     : null;
@@ -434,7 +477,7 @@ export function BuilderPage() {
     ? activeLayouts[selectedParentWidget.parentId]?.find((item) => item.i === selectedParentWidget.id) ?? null
     : null;
   const selectedCardLayoutCols = Math.max(1, Number(selectedParentLayoutItem?.w ?? 8));
-  const selectedCardControlMaxCols = Math.max(1, selectedCardLayoutCols - 1);
+  const selectedCardControlMaxCols = Math.max(1, selectedCardLayoutCols);
   const showCardLayoutControls = Boolean(
     selectedWidget
     && selectedParentWidget?.type === 'panel'
@@ -1121,30 +1164,11 @@ export function BuilderPage() {
   const isSavingDraft = persistenceState === 'saving';
   const isSwitchingVersion = persistenceState === 'switching';
   const isVersionControlBusy = isSavingDraft || isSwitchingVersion;
-  const isMinimalWidgetInspector = Boolean(selectedWidget && [
-    'panel',
-    'shadcn_login_card',
-    'heading',
-    'text',
-    'text_input',
-    'button',
-  ].includes(selectedWidget.type));
-  const selectedWidgetContractKey = typeof selectedWidget?.props?.contractKey === 'string'
-    ? selectedWidget.props.contractKey
-    : '';
   const selectedWidgetSourceName = typeof selectedWidget?.props?.sourceName === 'string'
     ? selectedWidget.props.sourceName.trim()
     : '';
-  const selectedWidgetTemplateName = typeof selectedWidget?.props?.kitTemplateName === 'string' && selectedWidget.props.kitTemplateName.trim().length > 0
-    ? selectedWidget.props.kitTemplateName.trim()
-    : typeof selectedWidget?.props?.sourceTemplateName === 'string' && selectedWidget.props.sourceTemplateName.trim().length > 0
-      ? selectedWidget.props.sourceTemplateName.trim()
-      : '';
-  const isShadcnLoginComposite = selectedWidgetContractKey === 'shadcn.card.login.v1'
-    || selectedWidget?.props?.sourceTemplateId === 'card_shadcn_login'
-    || selectedWidgetTemplateName === 'Shadcn Login Card';
   const selectedWidgetInspectorLabel = selectedWidget?.type === 'panel'
-    ? (isShadcnLoginComposite ? 'Shadcn Login' : 'Card Shell')
+    ? 'Card Shell'
     : selectedWidget?.type === 'shadcn_login_card'
       ? 'Shadcn Login'
       : selectedWidget?.type === 'heading'
@@ -1735,15 +1759,12 @@ export function BuilderPage() {
             {inspectorMode !== 'widget' ? null : (
               <WidgetInspectorPanel
                 selectedWidget={selectedWidget}
-                selectedLayoutItem={selectedLayoutItem}
+                selectedLayoutItem={selectedLayoutItemWithResizePreview}
                 selectedPage={selectedPage}
                 pages={pages}
-                activeWidgets={activeWidgets}
-                activeLayouts={activeLayouts}
                 sourceOptions={sourceOptions}
                 selectedBindings={selectedBindings}
                 selectedActions={selectedActions}
-                isMinimalWidgetInspector={isMinimalWidgetInspector}
                 selectedWidgetLayerLabel={selectedWidgetLayerLabel}
                 selectedWidgetInspectorLabel={selectedWidgetInspectorLabel}
                 selectedWidgetSourceBadge={selectedWidgetSourceBadge}
@@ -1751,10 +1772,8 @@ export function BuilderPage() {
                 showCardLayoutControls={showCardLayoutControls}
                 selectedCardControlMaxCols={selectedCardControlMaxCols}
                 selectedWidgetAutoOccupyRow={selectedWidgetAutoOccupyRow}
-                isShadcnLoginComposite={isShadcnLoginComposite}
                 widgetInspectorFooter={widgetInspectorFooter}
                 updateSelectedWidgetProps={updateSelectedWidgetProps}
-                updateWidgetPropsById={(widgetId, props) => updateWidgetProps(widgetId, props, activeWorkspaceScope)}
                 updateSelectedLayoutItem={updateSelectedLayoutItem}
                 updateSelectedWidgetAutoOccupyRow={updateSelectedWidgetAutoOccupyRow}
                 handleCreateActionTargetPage={handleCreateActionTargetPage}

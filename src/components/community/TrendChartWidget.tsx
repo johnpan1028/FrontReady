@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import {
   Area,
   AreaChart,
@@ -21,6 +21,12 @@ type TrendChartWidgetProps = {
   trend?: string;
   variant?: 'line' | 'area';
   data?: TrendPoint[];
+  surfaceTextStyle?: CSSProperties;
+  titleTextStyle?: CSSProperties;
+  valueTextStyle?: CSSProperties;
+  trendTextStyle?: CSSProperties;
+  axisFontFamily?: string;
+  axisFontSize?: number;
 };
 
 const DEFAULT_TREND_DATA: TrendPoint[] = [
@@ -42,6 +48,12 @@ export function TrendChartWidget({
   trend = '+12.4%',
   variant = 'line',
   data = DEFAULT_TREND_DATA,
+  surfaceTextStyle,
+  titleTextStyle,
+  valueTextStyle,
+  trendTextStyle,
+  axisFontFamily,
+  axisFontSize = 10,
 }: TrendChartWidgetProps) {
   const safeData = Array.isArray(data) && data.length > 0 ? data : DEFAULT_TREND_DATA;
   const chartId = useId().replace(/:/g, '');
@@ -79,18 +91,21 @@ export function TrendChartWidget({
   } as const;
 
   return (
-    <div className="flex h-full w-full flex-col rounded-[24px] border border-hr-border/72 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--theme-panel)_98%,white_2%)_0%,var(--theme-panel)_100%)] p-4 shadow-[var(--theme-shadow-panel)]">
+    <div
+      className="flex h-full w-full flex-col rounded-[24px] border border-hr-border/72 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--theme-panel)_98%,white_2%)_0%,var(--theme-panel)_100%)] p-4 shadow-[var(--theme-shadow-panel)]"
+      style={surfaceTextStyle}
+    >
       <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
         <div className="min-w-0">
           {title ? (
-            <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-hr-muted">
+            <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-hr-muted" style={titleTextStyle}>
               {title}
             </div>
           ) : null}
-          <div className="mt-1 truncate text-2xl font-semibold tracking-tight text-hr-text">{value}</div>
+          <div className="mt-1 truncate text-2xl font-semibold tracking-tight text-hr-text" style={valueTextStyle}>{value}</div>
         </div>
         {trend ? (
-          <div className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-500">
+          <div className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-500" style={trendTextStyle}>
             {trend}
           </div>
         ) : null}
@@ -110,7 +125,7 @@ export function TrendChartWidget({
                 dataKey="label"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: 'var(--theme-muted)', fontSize: 10 }}
+                tick={{ fill: 'var(--theme-muted)', fontSize: axisFontSize, fontFamily: axisFontFamily }}
               />
               <YAxis hide domain={['dataMin - 4', 'dataMax + 4']} />
               <Tooltip
@@ -138,7 +153,7 @@ export function TrendChartWidget({
                 dataKey="label"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: 'var(--theme-muted)', fontSize: 10 }}
+                tick={{ fill: 'var(--theme-muted)', fontSize: axisFontSize, fontFamily: axisFontFamily }}
               />
               <YAxis hide domain={['dataMin - 4', 'dataMax + 4']} />
               <Tooltip

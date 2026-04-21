@@ -7,15 +7,41 @@ import { useRuntime } from './RuntimeContext';
 type RuntimeNodeProps = {
   node: BuilderNodeDocument;
   preview?: boolean;
+  parentFontFamily?: string;
+  childrenFollowFont?: boolean;
+  parentControlBorderStyle?: 'solid' | 'transparent';
+  childrenFollowBorder?: boolean;
 };
 
-export function RuntimeNode({ node, preview = false }: RuntimeNodeProps) {
+export function RuntimeNode({
+  node,
+  preview = false,
+  parentFontFamily,
+  childrenFollowFont = false,
+  parentControlBorderStyle = 'solid',
+  childrenFollowBorder = false,
+}: RuntimeNodeProps) {
   const { resolveNodeProps, runActions } = useRuntime();
   const Component = RuntimeWidgetRegistry[node.type];
   if (!Component) return null;
 
   const resolvedProps = resolveNodeProps(node);
-  const widgetStyle = getWidgetFrameStyle(resolvedProps);
+  const effectiveProps = { ...resolvedProps };
+
+  if (
+    effectiveProps.fontFamily === 'parent'
+    && childrenFollowFont
+    && typeof parentFontFamily === 'string'
+    && parentFontFamily.trim().length > 0
+  ) {
+    effectiveProps.fontFamily = parentFontFamily;
+  }
+
+  if (effectiveProps.borderStyle === 'parent' && childrenFollowBorder === true) {
+    effectiveProps.borderStyle = parentControlBorderStyle;
+  }
+
+  const widgetStyle = getWidgetFrameStyle(effectiveProps);
   const outerStyle: CSSProperties | undefined = preview
     ? undefined
     : {
@@ -33,7 +59,7 @@ export function RuntimeNode({ node, preview = false }: RuntimeNodeProps) {
       <div className="w-full h-full" style={widgetStyle}>
         <Component
           node={node}
-          {...resolvedProps}
+          {...effectiveProps}
           runActions={node.actions.length > 0 ? () => void runActions(node.actions) : undefined}
         />
       </div>

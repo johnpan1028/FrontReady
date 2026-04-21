@@ -1,4 +1,16 @@
+import { Fragment, type ReactNode } from 'react';
+import {
+  InspectorField as InspectorFieldRow,
+  InspectorNumberInput,
+  InspectorReadonlyValue,
+  InspectorSection as InspectorSectionBlock,
+  InspectorToggleField,
+  inspectorInputClassName,
+  inspectorTextareaClassName,
+} from '../../components/builder-page/InspectorPrimitives';
 import type { LegacyLayoutItem } from '../../core/projectDocument';
+import { cn } from '../../utils/cn';
+import { getTypographyDefaultsForWidget } from '../../utils/typography';
 import type {
   CardDefinition,
   ControlDefinition,
@@ -8,8 +20,16 @@ import type {
 
 type StudioWidgetDefinition = ControlDefinition | CardDefinition;
 
-const inputClassName = 'w-full rounded-md border border-hr-border bg-hr-bg px-3 py-2 text-sm text-hr-text focus:outline-none focus:border-hr-primary focus:ring-1 focus:ring-hr-primary';
-const textareaClassName = 'min-h-[96px] w-full rounded-md border border-hr-border bg-hr-bg px-3 py-2 text-sm leading-5 text-hr-text focus:outline-none focus:border-hr-primary focus:ring-1 focus:ring-hr-primary';
+const TYPOGRAPHY_WIDE_FIELD_IDS = new Set([
+  'text-align',
+  'text-transform',
+  'text-decoration',
+]);
+
+const INLINE_FOLLOW_FIELD_IDS = new Set([
+  'children-follow-font',
+  'children-follow-border',
+]);
 
 type StudioDefinitionInspectorProps = {
   definition: StudioWidgetDefinition;
@@ -24,7 +44,12 @@ type StudioDefinitionInspectorProps = {
   onUpdateProps: (props: Record<string, unknown>) => void;
   onUpdateLayout: (updates: Partial<Pick<LegacyLayoutItem, 'x' | 'y' | 'w' | 'h' | 'minW' | 'minH'>>) => void;
   onUpdateAutoOccupyRow?: (checked: boolean) => void;
+  renderBeforeSection?: (section: InspectorSectionDefinition) => ReactNode;
 };
+
+const normalizeBorderStyleValue = (value: unknown, fallback: 'solid' | 'transparent' | 'parent' = 'solid') => (
+  value === 'transparent' || value === 'parent' || value === 'solid' ? value : fallback
+);
 
 const getPathValue = (
   value: StudioDefinitionInspectorProps['value'],
@@ -34,7 +59,35 @@ const getPathValue = (
   if (path === 'id') return value.id;
   if (path === 'type') return value.type;
   if (path.startsWith('props.')) {
-    return value.props[path.slice('props.'.length)];
+    const propKey = path.slice('props.'.length);
+    const propValue = value.props[propKey];
+    const typographyDefaults = getTypographyDefaultsForWidget(value.type, value.props);
+
+    if (propKey === 'borderStyle' || propKey === 'controlBorderStyle') {
+      return normalizeBorderStyleValue(propValue);
+    }
+
+    if (propKey === 'childrenFollowFont' || propKey === 'childrenFollowBorder') {
+      return propValue === true;
+    }
+
+    if (propKey === 'paddingLeft' || propKey === 'paddingRight') {
+      return propValue ?? value.props.paddingX ?? 16;
+    }
+
+    if (propKey === 'paddingTop' || propKey === 'paddingBottom') {
+      return propValue ?? value.props.paddingY ?? 16;
+    }
+
+    if (propKey === 'linkHorizontalPadding' || propKey === 'linkVerticalPadding') {
+      return propValue ?? true;
+    }
+
+    if (propKey in typographyDefaults) {
+      return propValue ?? typographyDefaults[propKey as keyof typeof typographyDefaults];
+    }
+
+    return propValue;
   }
   if (path.startsWith('layout.')) {
     return layoutItem?.[path.slice('layout.'.length) as keyof LegacyLayoutItem];
@@ -46,6 +99,45 @@ const toStringValue = (value: unknown) => {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return '';
+};
+
+const renderSegmentedOptionContent = (
+  field: InspectorFieldDefinition,
+  option: InspectorFieldDefinition['options'][number],
+) => {
+  if (field.id === 'text-align') {
+    return (
+      <span className="builder-inspector-align-glyph" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </span>
+    );
+  }
+
+  if (field.id === 'text-decoration') {
+    return (
+      <span
+        className={cn(
+          'builder-inspector-decoration-glyph',
+          option.value !== 'none' && `is-${option.value}`,
+        )}
+        aria-hidden="true"
+      >
+        {option.value === 'none' ? '—' : 'A'}
+      </span>
+    );
+  }
+
+  if (field.id === 'text-transform') {
+    return (
+      <span className="builder-inspector-case-glyph" aria-hidden="true">
+        {option.label}
+      </span>
+    );
+  }
+
+  return option.label;
 };
 
 const updateFieldValue = (
@@ -72,8 +164,38 @@ const updateFieldValue = (
   }
 };
 
+function InspectorInlineToggle({
+  field,
+  value,
+  layoutItem,
+  onUpdateProps,
+  onUpdateLayout,
+  onUpdateAutoOccupyRow,
+}: {
+  field: InspectorFieldDefinition;
+} & Omit<StudioDefinitionInspectorProps, 'definition'>) {
+  const currentValue = getPathValue(value, layoutItem, field.path);
+
+  return (
+    <label className="builder-inspector-inline-toggle">
+      <input
+        type="checkbox"
+        className="builder-inspector-inline-checkbox"
+        checked={Boolean(currentValue)}
+        onChange={(event) => updateFieldValue(
+          field,
+          event.target.checked,
+          { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow },
+        )}
+      />
+      <span>{field.label}</span>
+    </label>
+  );
+}
+
 function InspectorField({
   field,
+  labelAccessory: explicitLabelAccessory,
   value,
   layoutItem,
   maxCols = 48,
@@ -83,52 +205,72 @@ function InspectorField({
   onUpdateAutoOccupyRow,
 }: {
   field: InspectorFieldDefinition;
+  labelAccessory?: ReactNode;
 } & Omit<StudioDefinitionInspectorProps, 'definition'>) {
   const currentValue = getPathValue(value, layoutItem, field.path);
   const disabled = field.readOnly || (field.path === 'layout.w' && autoOccupyRow);
-  const commonLabel = (
-    <div className="flex items-center justify-between gap-2">
-      <label className="text-xs font-medium text-hr-text">{field.label}</label>
-      {field.supportsInheritMode ? (
-        <span className="rounded-full border border-hr-border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.12em] text-hr-muted">
-          inherit
-        </span>
-      ) : null}
-    </div>
-  );
+  const inheritLabelAccessory = field.supportsInheritMode ? (
+    <span className="builder-inspector-chip">Inherit</span>
+  ) : null;
+  const labelAccessory = explicitLabelAccessory || inheritLabelAccessory;
 
   if (field.kind === 'readonly') {
     return (
-      <div className="flex flex-col gap-1.5">
-        {commonLabel}
-        <div className="rounded-lg border border-hr-border bg-hr-bg px-3 py-2 text-[11px] font-mono text-hr-muted">
+      <InspectorFieldRow label={field.label} labelAccessory={labelAccessory}>
+        <InspectorReadonlyValue>
           {toStringValue(currentValue)}
-        </div>
-      </div>
+        </InspectorReadonlyValue>
+      </InspectorFieldRow>
     );
   }
 
   if (field.kind === 'textarea') {
     return (
-      <div className="flex flex-col gap-1.5">
-        {commonLabel}
+      <InspectorFieldRow label={field.label} labelAccessory={labelAccessory}>
         <textarea
-          className={textareaClassName}
+          className={inspectorTextareaClassName}
           placeholder={field.placeholder}
           value={toStringValue(currentValue)}
+          disabled={disabled}
           onChange={(event) => updateFieldValue(field, event.target.value, { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow })}
         />
-        {field.description ? <p className="text-[11px] leading-5 text-hr-muted">{field.description}</p> : null}
-      </div>
+      </InspectorFieldRow>
     );
   }
 
-  if (field.kind === 'select' || field.kind === 'segmented') {
+  if (field.kind === 'segmented') {
     return (
-      <div className="flex flex-col gap-1.5">
-        {commonLabel}
+      <InspectorFieldRow label={field.label} labelAccessory={labelAccessory}>
+        <div className="builder-inspector-segmented-field">
+          {field.options.map((option) => {
+            const isActive = toStringValue(currentValue) === option.value;
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={isActive ? 'builder-inspector-segmented-option is-active' : 'builder-inspector-segmented-option'}
+                data-field-id={field.id}
+                data-option-value={option.value}
+                aria-label={option.label}
+                title={option.label}
+                disabled={disabled}
+                onClick={() => updateFieldValue(field, option.value, { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow })}
+              >
+                {renderSegmentedOptionContent(field, option)}
+              </button>
+            );
+          })}
+        </div>
+      </InspectorFieldRow>
+    );
+  }
+
+  if (field.kind === 'select') {
+    return (
+      <InspectorFieldRow label={field.label} labelAccessory={labelAccessory}>
         <select
-          className={inputClassName}
+          className={inspectorInputClassName}
           value={toStringValue(currentValue)}
           disabled={disabled}
           onChange={(event) => updateFieldValue(field, event.target.value, { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow })}
@@ -139,60 +281,60 @@ function InspectorField({
             </option>
           ))}
         </select>
-        {field.description ? <p className="text-[11px] leading-5 text-hr-muted">{field.description}</p> : null}
-      </div>
+      </InspectorFieldRow>
     );
   }
 
   if (field.kind === 'switch' || field.kind === 'checkbox') {
     return (
-      <label className="flex items-start gap-2 text-sm text-hr-text">
-        <input
-          type="checkbox"
-          className="mt-0.5 rounded border-hr-border text-hr-primary focus:ring-hr-primary"
-          checked={Boolean(currentValue)}
-          disabled={disabled}
-          onChange={(event) => updateFieldValue(field, event.target.checked, { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow })}
-        />
-        <span className="flex flex-col gap-0.5">
-          <span>{field.label}</span>
-          {field.description ? <span className="text-[11px] leading-5 text-hr-muted">{field.description}</span> : null}
-        </span>
-      </label>
+      <InspectorToggleField
+        label={field.label}
+        description={undefined}
+        checked={Boolean(currentValue)}
+        disabled={disabled}
+        onChange={(checked) => updateFieldValue(field, checked, { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow })}
+      />
     );
   }
 
   if (field.kind === 'number') {
+    const minValue = typeof field.meta?.min === 'number' ? field.meta.min : 1;
+    const maxValue = typeof field.meta?.max === 'number'
+      ? field.meta.max
+      : field.path === 'layout.w' || field.path === 'layout.minW'
+        ? maxCols
+        : undefined;
+
     return (
-      <div className="flex flex-col gap-1.5">
-        {commonLabel}
-        <input
-          type="number"
-          min="1"
-          max={field.path === 'layout.w' || field.path === 'layout.minW' ? maxCols : undefined}
-          className={inputClassName}
+      <InspectorFieldRow label={field.label} labelAccessory={labelAccessory}>
+        <InspectorNumberInput
+          min={minValue}
+          max={maxValue}
           value={typeof currentValue === 'number' ? currentValue : ''}
           disabled={disabled}
-          onChange={(event) => updateFieldValue(field, parseInt(event.target.value, 10) || 1, { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow })}
+          onChange={(nextValue) => {
+            updateFieldValue(
+              field,
+              Number.isFinite(nextValue) ? Math.max(minValue, nextValue) : minValue,
+              { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow },
+            );
+          }}
         />
-        {field.description ? <p className="text-[11px] leading-5 text-hr-muted">{field.description}</p> : null}
-      </div>
+      </InspectorFieldRow>
     );
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      {commonLabel}
+    <InspectorFieldRow label={field.label} labelAccessory={labelAccessory}>
       <input
         type={field.kind === 'color' ? 'color' : 'text'}
-        className={inputClassName}
+        className={inspectorInputClassName}
         placeholder={field.placeholder}
         value={toStringValue(currentValue)}
         disabled={disabled}
         onChange={(event) => updateFieldValue(field, event.target.value, { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow })}
       />
-      {field.description ? <p className="text-[11px] leading-5 text-hr-muted">{field.description}</p> : null}
-    </div>
+    </InspectorFieldRow>
   );
 }
 
@@ -202,35 +344,123 @@ function InspectorSection({
 }: {
   section: InspectorSectionDefinition;
 } & Omit<StudioDefinitionInspectorProps, 'definition'>) {
-  return (
-    <div className="rounded-xl border border-hr-border bg-hr-panel p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-hr-muted">{section.title}</div>
-          {section.description ? (
-            <div className="mt-1 text-[11px] leading-5 text-hr-muted">{section.description}</div>
-          ) : null}
+  const isTypographySection = section.id === 'typography';
+  const isSpacingSection = section.id === 'spacing' && props.value.type === 'panel';
+  const isPanelWidget = props.value.type === 'panel';
+  const isPanelBorderSection = isPanelWidget && section.id === 'frame';
+
+  if (isSpacingSection) {
+    const getField = (fieldId: string) => section.fields.find((field) => field.id === fieldId);
+    const renderField = (fieldId: string) => {
+      const field = getField(fieldId);
+      if (!field) return null;
+      return <InspectorField key={field.id} field={field} {...props} />;
+    };
+
+    return (
+      <InspectorSectionBlock
+        title={section.title}
+        defaultOpen={section.defaultOpen !== false}
+        className="builder-inspector-section-spacing"
+      >
+        <div className="builder-inspector-spacing-grid">
+          <div className="builder-inspector-spacing-card">
+            {renderField('padding-horizontal-link')}
+            {renderField('padding-left')}
+            {renderField('padding-right')}
+          </div>
+
+          <div className="builder-inspector-spacing-card">
+            {renderField('padding-vertical-link')}
+            {renderField('padding-top')}
+            {renderField('padding-bottom')}
+          </div>
         </div>
+
+        {renderField('gap')}
+      </InspectorSectionBlock>
+    );
+  }
+
+  if (isPanelBorderSection) {
+    const followField = section.fields.find((field) => field.id === 'children-follow-border');
+
+    return (
+      <InspectorSectionBlock
+        title={section.title}
+        defaultOpen={section.defaultOpen !== false}
+      >
+        <div className="flex flex-col gap-3">
+          {section.fields
+            .filter((field) => field.id !== 'children-follow-border')
+            .map((field) => (
+              <InspectorField
+                key={field.id}
+                field={field}
+                labelAccessory={field.id === 'control-border-style' && followField ? (
+                  <InspectorInlineToggle field={followField} {...props} />
+                ) : undefined}
+                {...props}
+              />
+            ))}
+        </div>
+      </InspectorSectionBlock>
+    );
+  }
+
+  return (
+    <InspectorSectionBlock
+      title={section.title}
+      defaultOpen={section.defaultOpen !== false}
+      className={isTypographySection ? 'builder-inspector-section-typography' : undefined}
+    >
+      <div className={isTypographySection ? 'builder-inspector-typography-grid' : 'flex flex-col gap-3'}>
+        {section.fields.map((field) => {
+          if (INLINE_FOLLOW_FIELD_IDS.has(field.id)) return null;
+
+          const followField = isTypographySection && isPanelWidget && field.id === 'font-family'
+            ? section.fields.find((sectionField) => sectionField.id === 'children-follow-font')
+            : null;
+          const fieldNode = (
+            <InspectorField
+              key={field.id}
+              field={field}
+              labelAccessory={followField ? <InspectorInlineToggle field={followField} {...props} /> : undefined}
+              {...props}
+            />
+          );
+
+          if (!isTypographySection) return fieldNode;
+
+          return (
+            <div
+              key={field.id}
+              className={TYPOGRAPHY_WIDE_FIELD_IDS.has(field.id) ? 'builder-inspector-typography-wide' : undefined}
+            >
+              {fieldNode}
+            </div>
+          );
+        })}
       </div>
-      <div className="mt-3 flex flex-col gap-3">
-        {section.fields.map((field) => (
-          <InspectorField key={field.id} field={field} {...props} />
-        ))}
-      </div>
-    </div>
+    </InspectorSectionBlock>
   );
 }
 
 export function StudioDefinitionInspector({
   definition,
+  renderBeforeSection,
   ...props
 }: StudioDefinitionInspectorProps) {
-  const sections = [...definition.inspector].sort((left, right) => left.priority - right.priority);
+  const sections = [...definition.inspector]
+    .sort((left, right) => left.priority - right.priority);
 
   return (
     <>
       {sections.map((section) => (
-        <InspectorSection key={section.id} section={section} {...props} />
+        <Fragment key={section.id}>
+          {renderBeforeSection?.(section)}
+          <InspectorSection section={section} {...props} />
+        </Fragment>
       ))}
     </>
   );

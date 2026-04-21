@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
@@ -14,6 +15,9 @@ export interface SelectInputProps {
   value?: string;
   disabled?: boolean;
   hint?: string;
+  labelTextStyle?: CSSProperties;
+  inputTextStyle?: CSSProperties;
+  hintTextStyle?: CSSProperties;
   onValueChange?: (value: string) => void;
 }
 
@@ -23,10 +27,22 @@ const DEFAULT_OPTIONS: SelectOption[] = [
   { label: 'Option C', value: 'c' },
 ];
 
-export function SelectInput({ label, placeholder, options = DEFAULT_OPTIONS, defaultValue, value, disabled = false, hint, onValueChange }: SelectInputProps) {
+export function SelectInput({
+  label,
+  placeholder,
+  options = DEFAULT_OPTIONS,
+  defaultValue,
+  value,
+  disabled = false,
+  hint,
+  labelTextStyle,
+  inputTextStyle,
+  hintTextStyle,
+  onValueChange,
+}: SelectInputProps) {
   return (
     <div className="flex flex-col gap-1.5 w-full h-full justify-center">
-      {label && <label className="text-xs font-medium text-hr-text">{label}</label>}
+      {label && <label className="text-xs font-medium text-hr-text" style={labelTextStyle}>{label}</label>}
       <div className="relative w-full">
         <select
           defaultValue={value == null ? defaultValue : undefined}
@@ -40,6 +56,7 @@ export function SelectInput({ label, placeholder, options = DEFAULT_OPTIONS, def
             disabled && 'opacity-50 cursor-not-allowed',
             !(value ?? defaultValue) && 'text-hr-muted'
           )}
+          style={inputTextStyle}
         >
           {placeholder && <option value="" disabled>{placeholder}</option>}
           {options.map((opt) => (
@@ -48,7 +65,7 @@ export function SelectInput({ label, placeholder, options = DEFAULT_OPTIONS, def
         </select>
         <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-hr-muted pointer-events-none" />
       </div>
-      {hint && <p className="text-xs text-hr-muted">{hint}</p>}
+      {hint && <p className="text-xs text-hr-muted" style={hintTextStyle}>{hint}</p>}
     </div>
   );
 }

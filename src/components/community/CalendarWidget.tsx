@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { DayPicker } from 'react-day-picker';
 import { cn } from '../../utils/cn';
 
@@ -7,6 +8,9 @@ type CalendarWidgetProps = {
   month?: string;
   selectedDate?: string;
   interactive?: boolean;
+  surfaceTextStyle?: CSSProperties;
+  titleTextStyle?: CSSProperties;
+  subtitleTextStyle?: CSSProperties;
 };
 
 const parseIsoDate = (value?: string) => {
@@ -21,6 +25,9 @@ export function CalendarWidget({
   month,
   selectedDate,
   interactive = false,
+  surfaceTextStyle,
+  titleTextStyle,
+  subtitleTextStyle,
 }: CalendarWidgetProps) {
   const activeDate = parseIsoDate(selectedDate) ?? new Date();
   const activeMonth = parseIsoDate(month) ?? activeDate;
@@ -31,14 +38,15 @@ export function CalendarWidget({
         'builder-community-calendar flex h-full w-full flex-col rounded-[22px] border border-hr-border/70 bg-hr-panel/95 p-4 shadow-[0_18px_40px_rgba(15,23,42,0.10)]',
         !interactive && 'pointer-events-none',
       )}
+      style={surfaceTextStyle}
     >
       {(title || subtitle) ? (
         <div className="mb-3 flex shrink-0 flex-col gap-1">
           {title ? (
-            <div className="truncate text-sm font-semibold tracking-tight text-hr-text">{title}</div>
+            <div className="truncate text-sm font-semibold tracking-tight text-hr-text" style={titleTextStyle}>{title}</div>
           ) : null}
           {subtitle ? (
-            <div className="truncate text-[11px] text-hr-muted">{subtitle}</div>
+            <div className="truncate text-[11px] text-hr-muted" style={subtitleTextStyle}>{subtitle}</div>
           ) : null}
         </div>
       ) : null}

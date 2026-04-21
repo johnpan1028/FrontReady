@@ -18,23 +18,23 @@ export function InspectorPanelShell({
   children: ReactNode;
 }) {
   return (
-    <div className="w-80 bg-hr-panel border-l border-hr-border flex flex-col shrink-0 z-10">
-      <div className="flex min-h-[52px] items-center border-b border-hr-border px-3 py-1.5">
+    <div className="builder-inspector-shell flex w-[336px] shrink-0 flex-col border-l border-hr-border z-10">
+      <div className="builder-inspector-toolbar flex items-center border-b border-hr-border">
         <div className="flex w-full items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <h2 className="truncate font-semibold text-hr-text">{title}</h2>
-            <span className="inline-flex shrink-0 items-center rounded-full border border-hr-border bg-hr-bg px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-hr-muted">
+            <h2 className="truncate text-sm font-semibold text-hr-text">{title}</h2>
+            <span className="builder-inspector-chip">
               {badge}
             </span>
           </div>
-          <div className="inline-flex shrink-0 items-center rounded-lg border border-hr-border bg-hr-bg p-0.5">
+          <div className="builder-inspector-segmented inline-flex shrink-0 items-center p-0.5">
             <button
               type="button"
               onClick={onOpenProject}
               className={cn(
-                'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors',
+                'builder-inspector-quick-mode-button inline-flex items-center gap-1 font-medium transition-colors',
                 quickMode === 'project'
-                  ? 'bg-hr-primary text-white shadow-sm'
+                  ? 'bg-hr-text text-white shadow-sm'
                   : 'text-hr-muted hover:text-hr-text',
               )}
               title="Open project inspector"
@@ -46,9 +46,9 @@ export function InspectorPanelShell({
               type="button"
               onClick={onOpenTheme}
               className={cn(
-                'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors',
+                'builder-inspector-quick-mode-button inline-flex items-center gap-1 font-medium transition-colors',
                 quickMode === 'theme'
-                  ? 'bg-hr-primary text-white shadow-sm'
+                  ? 'bg-hr-text text-white shadow-sm'
                   : 'text-hr-muted hover:text-hr-text',
               )}
               title="Open theme inspector"
@@ -60,8 +60,8 @@ export function InspectorPanelShell({
         </div>
       </div>
 
-      <div className="p-4 overflow-y-auto" style={{ scrollbarGutter: 'stable' }}>
-        <div className="flex flex-col gap-4">
+      <div className="builder-inspector-scroll overflow-y-auto" style={{ scrollbarGutter: 'stable' }}>
+        <div className="builder-inspector-scroll-body flex flex-col">
           {children}
         </div>
       </div>

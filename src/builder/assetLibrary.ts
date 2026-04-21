@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import type { LegacyTemplateRecord } from '../core/projectDocument';
 import type { ProjectStarterId } from './projectStarters';
-import type { WidgetType } from './widgetConfig';
+import { cloneDefaultWidgetProps, type WidgetType } from './widgetConfig';
 
 export type BuilderAssetLayer = 'shell' | 'blueprint' | 'layout' | 'kit' | 'card' | 'control';
 export type BuilderAssetSurface = 'pages' | 'canvas' | 'kits';
@@ -119,7 +119,10 @@ const node = (
   id,
   type,
   layout,
-  props,
+  props: {
+    ...cloneDefaultWidgetProps(type),
+    ...props,
+  },
   children,
   meta,
   ...extras,
@@ -138,7 +141,7 @@ export const BUILT_IN_ASSET_TEMPLATES: BuiltInAssetTemplate[] = [
       'panel',
       { x: 2, y: 2, w: 18, h: 12, minW: 12, minH: 8 },
       {
-        title: '',
+        title: 'Header',
         showHeader: false,
         contractRole: 'card.shell',
         contractKey: 'card.shell.base',

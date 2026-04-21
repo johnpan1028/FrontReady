@@ -16,6 +16,7 @@ const KIT_DRAG_WIDGET_SIZE_MIME = 'application/x-kit-widget-size';
 const KIT_BOARD_HOST_SELECTOR = '[data-kit-board-host="true"]';
 const KIT_ROOT_DROP_PREVIEW_EVENT = 'kit-root-drop-preview';
 const KIT_ROOT_DRAG_SESSION_EVENT = 'kit-root-drag-session';
+const KIT_ROOT_RESIZE_PREVIEW_EVENT = 'kit-root-resize-preview';
 const NESTED_CANVAS_HOST_SELECTOR = '[data-nested-canvas-host="true"]';
 const ROOT_RESIZE_PREVIEW_HOST_SELECTOR = '.project-theme-scope--inline';
 const BORDERABLE_CONTROL_TYPES = new Set<WidgetType>([
@@ -40,6 +41,65 @@ type LayoutItemShape = {
   h: number;
   minW?: number;
   minH?: number;
+};
+
+type ParentStyleWidget = {
+  parentId: string;
+  props?: Record<string, unknown>;
+};
+
+const normalizeBorderStyleValue = (value: unknown): 'solid' | 'transparent' | 'parent' => (
+  value === 'transparent' || value === 'parent' ? value : 'solid'
+);
+
+const resolveParentControlBorderStyle = (
+  widgets: Record<string, ParentStyleWidget | undefined>,
+  parentId: string,
+  visited = new Set<string>(),
+): 'solid' | 'transparent' => {
+  const parentWidget = widgets[parentId];
+  if (!parentWidget || visited.has(parentId)) return 'solid';
+  visited.add(parentId);
+
+  const parentBorderStyle = normalizeBorderStyleValue(
+    parentWidget.props?.controlBorderStyle ?? parentWidget.props?.borderStyle,
+  );
+
+  if (parentBorderStyle === 'parent') {
+    return parentWidget.parentId === 'root'
+      ? 'solid'
+      : resolveParentControlBorderStyle(widgets, parentWidget.parentId, visited);
+  }
+
+  return parentBorderStyle;
+};
+
+const resolveEffectiveWidgetProps = (
+  widget: { parentId: string; props?: Record<string, unknown> } | undefined,
+  widgets: Record<string, ParentStyleWidget | undefined>,
+) => {
+  const ownProps = widget?.props ?? {};
+  if (!widget || widget.parentId === 'root') return ownProps;
+
+  const parentWidget = widgets[widget.parentId];
+  if (!parentWidget) return ownProps;
+
+  const nextProps: Record<string, unknown> = { ...ownProps };
+  const parentProps = parentWidget.props ?? {};
+
+  if (
+    ownProps.fontFamily === 'parent'
+    && parentProps.childrenFollowFont === true
+    && typeof parentProps.fontFamily === 'string'
+  ) {
+    nextProps.fontFamily = parentProps.fontFamily;
+  }
+
+  if (ownProps.borderStyle === 'parent' && parentProps.childrenFollowBorder === true) {
+    nextProps.borderStyle = resolveParentControlBorderStyle(widgets, widget.parentId);
+  }
+
+  return nextProps;
 };
 
 const findClosestContainerDropTarget = (source: EventTarget | Element | null) => {
@@ -99,6 +159,14 @@ const dispatchKitRootDragSession = (
       widgetType,
     },
   }));
+};
+
+const dispatchKitRootResizePreview = (
+  detail:
+    | { action: 'update'; widgetId: string; cols: number; rows: number }
+    | { action: 'clear'; widgetId?: string },
+) => {
+  window.dispatchEvent(new CustomEvent(KIT_ROOT_RESIZE_PREVIEW_EVENT, { detail }));
 };
 
 const sortLayoutItems = (items: readonly LayoutItemShape[]) => (
@@ -296,14 +364,16 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
   const Component = widgetType ? WidgetRegistry[widgetType] : null;
   const widgetParentId = widget?.parentId ?? 'root';
   const widgetProps = widget?.props ?? {};
+  const effectiveWidgetProps = resolveEffectiveWidgetProps(widget, scopedWidgets);
   const isRootKitWidget = scope === 'kit' && widgetParentId === 'root';
   const publishedMasterName = typeof widgetProps?.kitTemplateName === 'string'
     ? widgetProps.kitTemplateName.trim()
     : '';
 
-  const widgetStyle = getWidgetFrameStyle(widgetProps);
+  const widgetStyle = getWidgetFrameStyle(effectiveWidgetProps);
   const canAcceptChildDrop = widgetType ? isContainerWidget(widgetType) : false;
   const isBoardManagedKitNode = isRootKitWidget && (canAcceptChildDrop || publishedMasterName.length > 0);
+  const canResizeOnKitBoard = isRootKitWidget && (widgetType === 'panel' || !canAcceptChildDrop);
   const showSmartMoveHandle = scope === 'kit' && (!isRootKitWidget || !isBoardManagedKitNode);
   const childLayout = scopedLayouts[id] ?? [];
   const targetLayoutItem = scopedLayouts[widgetParentId]?.find((item) => item.i === id);
@@ -365,7 +435,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
   }, []);
 
   const handleRootResizePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!(scope === 'kit' && widgetParentId === 'root' && widgetType === 'panel')) return;
+    if (!(scope === 'kit' && widgetParentId === 'root' && (widgetType === 'panel' || !canAcceptChildDrop))) return;
     if (!targetLayoutItem) return;
 
     const wrapper = wrapperRef.current;
@@ -423,9 +493,9 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       const nextWidthStyle = `${Math.round(nextWidthPx)}px`;
       const nextHeightStyle = `${Math.round(nextHeightPx)}px`;
       const previewHost = rootResizePreviewHostRef.current;
+      const previewChanged = nextCols !== session.lastCols || nextRows !== session.lastRows;
       if (
-        nextCols === session.lastCols
-        && nextRows === session.lastRows
+        !previewChanged
         && wrapperRef.current?.style.width === nextWidthStyle
         && wrapperRef.current?.style.height === nextHeightStyle
         && (!previewHost || (
@@ -455,6 +525,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
           previewHostNode.style.height = nextHeightStyle;
           previewHostNode.style.minHeight = nextHeightStyle;
         }
+        dispatchKitRootResizePreview({ action: 'update', widgetId: id, cols: nextCols, rows: nextRows });
         resizeFrameRef.current = null;
       });
     };
@@ -475,6 +546,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       updateLayoutItem(id, 'root', { w: nextCols, h: nextRows }, 'kit');
       window.setTimeout(() => {
         clearRootResizePreviewStyles();
+        dispatchKitRootResizePreview({ action: 'clear', widgetId: id });
       }, 0);
       stopRootResize();
     };
@@ -497,6 +569,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
     updateLayoutItem,
     widgetParentId,
     widgetType,
+    canAcceptChildDrop,
   ]);
 
   const updateDragProxyPosition = useCallback((clientX: number, clientY: number) => {
@@ -838,8 +911,8 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       data-builder-node-id={widget.id}
       data-builder-node-type={widget.type}
       data-builder-parent-id={widget.parentId}
-      data-widget-border-style={typeof widget.props?.borderStyle === 'string'
-        ? (widget.props.borderStyle === 'transparent' ? 'transparent' : 'solid')
+      data-widget-border-style={typeof effectiveWidgetProps.borderStyle === 'string'
+        ? (effectiveWidgetProps.borderStyle === 'transparent' ? 'transparent' : 'solid')
         : (BORDERABLE_CONTROL_TYPES.has(widget.type) ? 'solid' : 'transparent')}
       data-widget-selected={isSelected ? 'true' : 'false'}
       data-widget-dragging={isDragActive ? 'true' : 'false'}
@@ -932,17 +1005,17 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
             <Move size={12} />
           </div>
         ) : null}
-        {scope === 'kit' && widgetParentId === 'root' && widgetType === 'panel' ? (
+        {canResizeOnKitBoard ? (
           <span
             className={cn(
               "react-resizable-handle react-resizable-handle-se absolute z-20 transition-opacity",
               isSelected ? "opacity-100" : showControlsOnHover ? "opacity-0 group-hover:opacity-100" : "opacity-0",
             )}
             onPointerDown={handleRootResizePointerDown}
-            title="Resize card width"
+            title={widgetType === 'panel' ? 'Resize card' : 'Resize control'}
           />
         ) : null}
-        <Component id={widget.id} {...widget.props} />
+        <Component id={widget.id} {...effectiveWidgetProps} />
       </div>
     </div>
   );

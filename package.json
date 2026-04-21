@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "verify:kit-inspector": "node scripts/verify-kit-studio-inspector.mjs",
     "temp:organize": "node scripts/organize-temp.mjs"
   },
   "dependencies": {

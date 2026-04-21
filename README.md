@@ -55,6 +55,7 @@
 - 根目录 `components/`、`lib/` 仅在明确接入 shadcn 生成物时使用，默认业务代码仍放 `src/` 体系
 - 所有临时日志、截图、备份、测试产物统一进入 `temp/`，不要重新把临时目录散落到仓库根部
 - 发现新的 debug、开始修复、修复完成，这三个节点都要同步更新 `docs/debug-record.md`；同一问题持续维护同一条记录
+- Kit Studio 右侧栏、拖拽、布局、控件显示类修复必须跑固定浏览器回测：`npm run verify:kit-inspector`；不要再用临时浏览器方法替代
 
 ## 下一步修复与调试建议
 
@@ -68,6 +69,7 @@
 1. 安装依赖：`npm install`
 2. 本地编辑器：`npm run dev`
 3. 云模式联调：`npm run dev:cloud`
+4. Kit Studio 固定浏览器回测：`npm run verify:kit-inspector`
 4. 类型检查：`npm run lint`
 5. 临时文件归档：`npm run temp:organize`
 6. 推送 GitHub 备份：`npm run backup:github`

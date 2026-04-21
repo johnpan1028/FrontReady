@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { cn } from '../../utils/cn';
 
 export interface TextareaInputProps {
@@ -9,15 +10,31 @@ export interface TextareaInputProps {
   rows?: number;
   hint?: string;
   resize?: 'none' | 'vertical' | 'both';
+  labelTextStyle?: CSSProperties;
+  inputTextStyle?: CSSProperties;
+  hintTextStyle?: CSSProperties;
   onValueChange?: (value: string) => void;
 }
 
-export function TextareaInput({ label, placeholder, defaultValue, value, disabled = false, rows = 3, hint, resize = 'vertical', onValueChange }: TextareaInputProps) {
+export function TextareaInput({
+  label,
+  placeholder,
+  defaultValue,
+  value,
+  disabled = false,
+  rows = 3,
+  hint,
+  resize = 'vertical',
+  labelTextStyle,
+  inputTextStyle,
+  hintTextStyle,
+  onValueChange,
+}: TextareaInputProps) {
   const resizeClass = { none: 'resize-none', vertical: 'resize-y', both: 'resize' }[resize];
 
   return (
     <div className="flex flex-col gap-1.5 w-full h-full">
-      {label && <label className="text-xs font-medium text-hr-text">{label}</label>}
+      {label && <label className="text-xs font-medium text-hr-text" style={labelTextStyle}>{label}</label>}
       <textarea
         placeholder={placeholder || 'Enter text...'}
         defaultValue={value == null ? defaultValue : undefined}
@@ -33,8 +50,9 @@ export function TextareaInput({ label, placeholder, defaultValue, value, disable
           resizeClass,
           disabled && 'opacity-50 cursor-not-allowed'
         )}
+        style={inputTextStyle}
       />
-      {hint && <p className="text-xs text-hr-muted">{hint}</p>}
+      {hint && <p className="text-xs text-hr-muted" style={hintTextStyle}>{hint}</p>}
     </div>
   );
 }

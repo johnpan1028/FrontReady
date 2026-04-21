@@ -2599,11 +2599,77 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
     const currentWidgets = getWorkspaceWidgets(state, scope);
     if (!currentWidgets[id]) return state;
 
+    const currentWidget = currentWidgets[id];
+    const nextWidgetProps = {
+      ...currentWidget.props,
+      ...props,
+    };
+
+    if (
+      currentWidget.type === 'panel'
+      && props.showHeader === true
+    ) {
+      const nextHeaderText = typeof nextWidgetProps.title === 'string'
+        ? nextWidgetProps.title.trim()
+        : '';
+
+      if (nextHeaderText.length === 0) {
+        nextWidgetProps.title = 'Header';
+      }
+    }
+
+    if (currentWidget.type === 'panel') {
+      const fallbackHorizontal = Number.isFinite(Number(nextWidgetProps.paddingX))
+        ? Number(nextWidgetProps.paddingX)
+        : 16;
+      const fallbackVertical = Number.isFinite(Number(nextWidgetProps.paddingY))
+        ? Number(nextWidgetProps.paddingY)
+        : 16;
+
+      const resolvePanelPadding = (value: unknown, fallback: number) => {
+        const nextValue = Number(value);
+        return Number.isFinite(nextValue) ? Math.max(0, Math.round(nextValue)) : fallback;
+      };
+
+      const horizontalLinked = nextWidgetProps.linkHorizontalPadding !== false;
+      const verticalLinked = nextWidgetProps.linkVerticalPadding !== false;
+
+      let nextPaddingLeft = resolvePanelPadding(nextWidgetProps.paddingLeft, fallbackHorizontal);
+      let nextPaddingRight = resolvePanelPadding(nextWidgetProps.paddingRight, fallbackHorizontal);
+      let nextPaddingTop = resolvePanelPadding(nextWidgetProps.paddingTop, fallbackVertical);
+      let nextPaddingBottom = resolvePanelPadding(nextWidgetProps.paddingBottom, fallbackVertical);
+
+      if (horizontalLinked) {
+        if (props.paddingRight !== undefined && props.paddingLeft === undefined) {
+          nextPaddingLeft = nextPaddingRight;
+        } else {
+          nextPaddingRight = nextPaddingLeft;
+        }
+      }
+
+      if (verticalLinked) {
+        if (props.paddingBottom !== undefined && props.paddingTop === undefined) {
+          nextPaddingTop = nextPaddingBottom;
+        } else {
+          nextPaddingBottom = nextPaddingTop;
+        }
+      }
+
+      nextWidgetProps.linkHorizontalPadding = horizontalLinked;
+      nextWidgetProps.linkVerticalPadding = verticalLinked;
+      nextWidgetProps.paddingLeft = nextPaddingLeft;
+      nextWidgetProps.paddingRight = nextPaddingRight;
+      nextWidgetProps.paddingTop = nextPaddingTop;
+      nextWidgetProps.paddingBottom = nextPaddingBottom;
+      nextWidgetProps.paddingX = nextPaddingLeft;
+      nextWidgetProps.paddingY = nextPaddingTop;
+    }
+
     const nextWidgets = {
       ...currentWidgets,
       [id]: {
-        ...currentWidgets[id],
-        props: { ...currentWidgets[id].props, ...props },
+        ...currentWidget,
+        props: nextWidgetProps,
       },
     };
 

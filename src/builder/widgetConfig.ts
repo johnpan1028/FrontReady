@@ -27,11 +27,17 @@ export type WidgetSize = {
 
 const DEFAULT_CONTROL_LAYOUT_PROPS = {
   autoOccupyRow: false,
+  fontFamily: 'parent',
+};
+
+const DEFAULT_CONTROL_FRAME_PROPS = {
+  ...DEFAULT_CONTROL_LAYOUT_PROPS,
+  borderStyle: 'parent',
 };
 
 export const DEFAULT_WIDGET_PROPS: Record<WidgetType, Record<string, unknown>> = {
-  heading: { ...DEFAULT_CONTROL_LAYOUT_PROPS, text: 'New Heading', size: 'md' },
-  text: { ...DEFAULT_CONTROL_LAYOUT_PROPS, text: 'Enter your text here...' },
+  heading: { ...DEFAULT_CONTROL_FRAME_PROPS, text: 'New Heading', size: 'md' },
+  text: { ...DEFAULT_CONTROL_FRAME_PROPS, text: 'Enter your text here...' },
   stat: { ...DEFAULT_CONTROL_LAYOUT_PROPS, title: 'Monthly recurring', value: '$48.2k', trend: '+12.4%', tone: 'positive' },
   chart: {
     ...DEFAULT_CONTROL_LAYOUT_PROPS,
@@ -66,14 +72,14 @@ export const DEFAULT_WIDGET_PROPS: Record<WidgetType, Record<string, unknown>> =
     sourceUrl: 'https://ui.shadcn.com/docs/components/card',
     sourceName: 'shadcn/ui Card login example',
   },
-  button: { ...DEFAULT_CONTROL_LAYOUT_PROPS, text: 'Click Me', variant: 'primary' },
-  icon_button: { ...DEFAULT_CONTROL_LAYOUT_PROPS, icon: 'X', size: 'md', variant: 'ghost', tooltip: 'Close' },
-  divider: { ...DEFAULT_CONTROL_LAYOUT_PROPS, direction: 'horizontal', color: 'default' },
-  text_input: { ...DEFAULT_CONTROL_LAYOUT_PROPS, label: 'Label', placeholder: 'Enter text...', chrome: 'ghost' },
-  number_input: { ...DEFAULT_CONTROL_LAYOUT_PROPS, label: 'Number', placeholder: '0', chrome: 'ghost' },
-  textarea: { ...DEFAULT_CONTROL_LAYOUT_PROPS, label: 'Description', placeholder: 'Enter description...' },
+  button: { ...DEFAULT_CONTROL_FRAME_PROPS, text: 'Click Me', variant: 'primary' },
+  icon_button: { ...DEFAULT_CONTROL_FRAME_PROPS, icon: 'X', size: 'md', variant: 'ghost', tooltip: 'Close' },
+  divider: { ...DEFAULT_CONTROL_FRAME_PROPS, direction: 'horizontal', color: 'default' },
+  text_input: { ...DEFAULT_CONTROL_FRAME_PROPS, label: 'Label', placeholder: 'Enter text...', chrome: 'ghost' },
+  number_input: { ...DEFAULT_CONTROL_FRAME_PROPS, label: 'Number', placeholder: '0', chrome: 'ghost' },
+  textarea: { ...DEFAULT_CONTROL_FRAME_PROPS, label: 'Description', placeholder: 'Enter description...' },
   select: {
-    ...DEFAULT_CONTROL_LAYOUT_PROPS,
+    ...DEFAULT_CONTROL_FRAME_PROPS,
     label: 'Select',
     placeholder: 'Choose...',
     options: [
@@ -82,7 +88,7 @@ export const DEFAULT_WIDGET_PROPS: Record<WidgetType, Record<string, unknown>> =
     ],
   },
   checkbox: {
-    ...DEFAULT_CONTROL_LAYOUT_PROPS,
+    ...DEFAULT_CONTROL_FRAME_PROPS,
     label: 'Choose options',
     options: [
       { label: 'Option A', value: 'a' },
@@ -90,14 +96,32 @@ export const DEFAULT_WIDGET_PROPS: Record<WidgetType, Record<string, unknown>> =
     ],
   },
   radio: {
-    ...DEFAULT_CONTROL_LAYOUT_PROPS,
+    ...DEFAULT_CONTROL_FRAME_PROPS,
     label: 'Select one',
     options: [
       { label: 'Option A', value: 'a' },
       { label: 'Option B', value: 'b' },
     ],
   },
-  panel: {},
+  panel: {
+    title: 'Header',
+    layoutMode: 'grid',
+    showHeader: false,
+    showFooter: false,
+    fontFamily: 'theme',
+    childrenFollowFont: true,
+    controlBorderStyle: 'solid',
+    childrenFollowBorder: true,
+    footerText: 'Footer',
+    paddingLeft: 16,
+    paddingRight: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+    linkHorizontalPadding: true,
+    linkVerticalPadding: true,
+    gap: 16,
+    scrollable: true,
+  },
   canvas: {},
 };
 

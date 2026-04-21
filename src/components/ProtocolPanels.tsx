@@ -2,6 +2,13 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { BadgeCheck, Bot, DatabaseZap, Github, LogIn, MailCheck, Palette, Plus, RefreshCw, ShieldCheck, Sparkles, Trash2, UserPlus } from 'lucide-react';
 import { BUILDER_BLUEPRINTS, type BuilderBlueprintId } from '../builder/blueprints';
 import { useFeedback } from './FeedbackProvider';
+import {
+  InspectorField,
+  InspectorSection,
+  inspectorInputClassName,
+  inspectorItemClassName,
+  inspectorTextareaClassName,
+} from './builder-page/InspectorPrimitives';
 import { mergeBuilderThemeManifest } from '../theme/compiler';
 import { THEME_REFERENCE_PROFILES, type ThemeReferenceProfileId } from '../theme/referenceProfiles';
 import { BUILDER_THEME_TOKEN_KEYS, type BuilderThemeTokenKey } from '../theme/schema';
@@ -44,17 +51,21 @@ type SectionProps = {
   title: string;
   description?: string;
   children: React.ReactNode;
+  compact?: boolean;
+  defaultOpen?: boolean;
 };
 
-function PanelSection({ title, description, children }: SectionProps) {
+function PanelSection({
+  title,
+  description,
+  children,
+  compact = false,
+  defaultOpen = true,
+}: SectionProps) {
   return (
-    <div className="builder-panel-section flex flex-col gap-3 rounded-xl border border-hr-border bg-hr-bg/60 p-3">
-      <div className="flex flex-col gap-1">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-hr-text">{title}</h3>
-        {description ? <p className="text-[11px] text-hr-muted">{description}</p> : null}
-      </div>
+    <InspectorSection title={title} defaultOpen={defaultOpen}>
       {children}
-    </div>
+    </InspectorSection>
   );
 }
 
@@ -94,16 +105,11 @@ function Field({
   label: string;
   children: React.ReactNode;
 }) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-hr-text">{label}</span>
-      {children}
-    </label>
-  );
+  return <InspectorField label={label}>{children}</InspectorField>;
 }
 
-const inputClassName = 'builder-control w-full rounded-md border border-hr-border bg-hr-panel px-3 py-2 text-sm text-hr-text focus:outline-none focus:border-hr-primary';
-const textareaClassName = 'builder-control min-h-[90px] w-full rounded-md border border-hr-border bg-hr-panel px-3 py-2 text-xs font-mono text-hr-text focus:outline-none focus:border-hr-primary';
+const inputClassName = inspectorInputClassName;
+const textareaClassName = `${inspectorTextareaClassName} text-xs font-mono`;
 
 type RestSource = Extract<BuilderDataSource, { kind: 'rest' }>;
 type MockSource = Extract<BuilderDataSource, { kind: 'mock' }>;
@@ -1553,10 +1559,12 @@ export function DataSourcesPanel({
 export function BindingsPanel({
   bindings,
   sourceOptions,
+  compact = false,
   onChange,
 }: {
   bindings: DataBinding[];
   sourceOptions: SourceOption[];
+  compact?: boolean;
   onChange: (bindings: DataBinding[]) => void;
 }) {
   const updateBinding = (id: string, updater: (binding: DataBinding) => DataBinding) => {
@@ -1567,6 +1575,7 @@ export function BindingsPanel({
     <PanelSection
       title="Bindings"
       description="Bind component fields to project data sources. AI reproduces the same wiring from target props and paths."
+      compact={compact}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="text-[11px] text-hr-muted">{bindings.length} binding(s)</div>
@@ -1582,7 +1591,7 @@ export function BindingsPanel({
 
       <div className="flex flex-col gap-3">
         {bindings.map((binding) => (
-          <div key={binding.id} className="rounded-lg border border-hr-border bg-hr-panel p-3">
+          <div key={binding.id} className={inspectorItemClassName}>
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="text-[11px] font-mono text-hr-muted">{binding.id}</div>
               <SmallActionButton
@@ -1664,6 +1673,7 @@ export function ActionsPanel({
   pages = [],
   currentPageId = null,
   onCreateTargetPage,
+  compact = false,
   onChange,
 }: {
   actions: NodeAction[];
@@ -1671,6 +1681,7 @@ export function ActionsPanel({
   pages?: BuilderPage[];
   currentPageId?: string | null;
   onCreateTargetPage?: (kind: BuilderPage['kind']) => BuilderPage | null;
+  compact?: boolean;
   onChange: (actions: NodeAction[]) => void;
 }) {
   const { notify } = useFeedback();
@@ -1757,6 +1768,7 @@ export function ActionsPanel({
     <PanelSection
       title="Actions"
       description="Actions map directly to runtime behavior and AI integration tasks."
+      compact={compact}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="text-[11px] text-hr-muted">{actions.length} action(s)</div>
@@ -1779,7 +1791,7 @@ export function ActionsPanel({
           const overlayTargets = withSelectedTarget(projectOverlayTargets, modalConfig?.targetPageId ?? '');
 
           return (
-            <div key={action.id} className="rounded-lg border border-hr-border bg-hr-panel p-3">
+            <div key={action.id} className={inspectorItemClassName}>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="text-[11px] font-mono text-hr-muted">{action.id}</div>
                 <SmallActionButton

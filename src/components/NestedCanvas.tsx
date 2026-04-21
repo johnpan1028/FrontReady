@@ -945,7 +945,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     const proposedItem = compactGridRulesEnabled
       ? {
           i: newId,
-          ...resolveCompactIncomingLayout(item, { w, h }, { props: { autoOccupyRow: true } }, 'root'),
+          ...resolveCompactIncomingLayout(item, { w, h }, { props: { autoOccupyRow: false } }, 'root'),
         }
       : {
           i: newId,
@@ -1038,7 +1038,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
       event,
       getPlaceholderSize(type as WidgetType),
       newId,
-      { props: { autoOccupyRow: true } },
+      { props: { autoOccupyRow: false } },
       'root',
     );
 

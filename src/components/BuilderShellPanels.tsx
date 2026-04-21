@@ -4,6 +4,12 @@ import type { BuilderPage, BuilderPageLink, ProjectArchetype, TargetPlatform } f
 import type { ProjectIndexRecord, ProjectSnapshotRecord } from '../lib/db';
 import { cn } from '../utils/cn';
 import type { CurvePointToolMode, RelationPathType, RelationStrokePattern } from './PageBoard';
+import {
+  InspectorField,
+  InspectorSection,
+  inspectorInputClassName,
+  inspectorItemClassName,
+} from './builder-page/InspectorPrimitives';
 
 type SectionProps = {
   title: string;
@@ -11,6 +17,7 @@ type SectionProps = {
   headerActions?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  defaultOpen?: boolean;
 };
 
 type ReadinessIssue = {
@@ -19,7 +26,7 @@ type ReadinessIssue = {
   message: string;
 };
 
-const inputClassName = 'w-full rounded-md border border-hr-border bg-hr-panel px-3 py-2 text-sm text-hr-text focus:outline-none focus:border-hr-primary';
+const inputClassName = inspectorInputClassName;
 const versionTimestampFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'short',
   day: 'numeric',
@@ -27,18 +34,23 @@ const versionTimestampFormatter = new Intl.DateTimeFormat('en-US', {
   minute: '2-digit',
 });
 
-function Section({ title, description, headerActions, children, className }: SectionProps) {
+function Section({
+  title,
+  description,
+  headerActions,
+  children,
+  className,
+  defaultOpen = true,
+}: SectionProps) {
   return (
-    <div className={cn('flex flex-col gap-3 rounded-xl border border-hr-border bg-hr-bg/60 p-3 transition-colors', className)}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-hr-text">{title}</h3>
-          {description ? <p className="text-[11px] text-hr-muted">{description}</p> : null}
-        </div>
-        {headerActions ? <div className="flex shrink-0 items-center gap-1">{headerActions}</div> : null}
-      </div>
+    <InspectorSection
+      title={title}
+      sideSlot={headerActions ? <div className="flex shrink-0 items-center gap-1">{headerActions}</div> : null}
+      className={className}
+      defaultOpen={defaultOpen}
+    >
       {children}
-    </div>
+    </InspectorSection>
   );
 }
 
@@ -49,27 +61,15 @@ function Field({
   label: string;
   children: React.ReactNode;
 }) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-hr-text">{label}</span>
-      {children}
-    </label>
-  );
+  return <InspectorField label={label}>{children}</InspectorField>;
 }
 
 const segmentedButtonClassName = (active: boolean) => cn(
   'inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
   active
-    ? 'border-hr-primary bg-hr-primary/12 text-hr-primary shadow-sm'
-    : 'border-hr-border bg-hr-panel text-hr-muted hover:border-hr-primary hover:text-hr-primary',
+    ? 'border-hr-text bg-hr-text text-white shadow-sm'
+    : 'border-hr-border bg-transparent text-hr-muted hover:border-hr-text hover:text-hr-text',
 );
-
-const relationKindLabels: Record<BuilderPageLink['kind'], string> = {
-  'navigate-page': 'Page Flow',
-  'open-overlay': 'Open Overlay',
-  'switch-overlay': 'Overlay Switch',
-  'return-page': 'Return',
-};
 
 function RelationCurvePointToolIcon({ mode }: { mode: 'add' | 'remove' }) {
   return (
@@ -111,7 +111,6 @@ const archetypeLabels: Record<ProjectArchetype, string> = {
 };
 
 export function ProjectContractPanel({
-  projectId,
   projectName,
   targetPlatform,
   projectArchetype,
@@ -176,17 +175,6 @@ export function ProjectContractPanel({
         </>
       )}
     >
-      <Field label="Project ID">
-        <input
-          type="text"
-          name="projectId"
-          aria-label="Project ID"
-          className={cn(inputClassName, 'cursor-default border-hr-border/70 font-mono text-hr-muted focus:border-hr-border/70')}
-          value={projectId}
-          readOnly
-        />
-      </Field>
-
       <div className="flex flex-col gap-1.5">
         <span className="text-xs font-medium text-hr-text">Project Name</span>
         <div className="flex items-center gap-2">
@@ -808,10 +796,6 @@ export function PageShellInspectorPanel({
       title={page.kind === 'overlay' ? 'Overlay Shell' : 'Page Shell'}
       description="Edit the topology shell itself. Inner content cannot push the desktop shell wider."
     >
-      <Field label="Shell ID">
-        <input type="text" name="pageShellId" className={inputClassName} value={page.id} readOnly />
-      </Field>
-
       <Field label="Name">
         <input
           type="text"
@@ -833,11 +817,11 @@ export function PageShellInspectorPanel({
       </Field>
 
       <div className="grid grid-cols-2 gap-2 text-sm">
-        <div className="rounded-lg border border-hr-border bg-hr-panel px-3 py-2">
+        <div className={cn(inspectorItemClassName, 'px-3 py-2')}>
           <div className="text-[11px] uppercase tracking-wider text-hr-muted">Shell Size</div>
           <div className="mt-1 font-semibold text-hr-text">{page.board.width} × {page.board.height}</div>
         </div>
-        <div className="rounded-lg border border-hr-border bg-hr-panel px-3 py-2">
+        <div className={cn(inspectorItemClassName, 'px-3 py-2')}>
           <div className="text-[11px] uppercase tracking-wider text-hr-muted">Board Position</div>
           <div className="mt-1 font-semibold text-hr-text">{page.board.x}, {page.board.y}</div>
         </div>
@@ -847,7 +831,6 @@ export function PageShellInspectorPanel({
 }
 
 export function RelationInspectorPanel({
-  relation,
   sourcePageName,
   targetPageName,
   effectiveLabelText,
@@ -896,14 +879,6 @@ export function RelationInspectorPanel({
       title="Relation Contract"
       description="System-generated links stay anchored. You tune presentation and curve point editing here."
     >
-      <Field label="Relation ID">
-        <input type="text" name="relationId" className={cn(inputClassName, 'font-mono text-xs text-hr-muted')} value={relation.id} readOnly />
-      </Field>
-
-      <Field label="Relation Type">
-        <input type="text" name="relationKind" className={cn(inputClassName, 'text-hr-muted')} value={relationKindLabels[relation.kind]} readOnly />
-      </Field>
-
       <Field label="Flow">
         <input type="text" name="relationFlow" className={cn(inputClassName, 'text-hr-muted')} value={`${sourcePageName} → ${targetPageName}`} readOnly />
       </Field>

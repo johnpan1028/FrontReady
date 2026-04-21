@@ -2,6 +2,14 @@ import type { z } from 'zod';
 import type { WidgetType } from '../../builder/widgetConfig';
 import type { WidgetData } from '../../store/builderStore';
 import {
+  TYPOGRAPHY_ALIGNMENT_OPTIONS,
+  TYPOGRAPHY_CASE_OPTIONS,
+  TYPOGRAPHY_DECORATION_OPTIONS,
+  TYPOGRAPHY_FONT_OPTIONS,
+  TYPOGRAPHY_STYLE_OPTIONS,
+  TYPOGRAPHY_WEIGHT_OPTIONS,
+} from '../../utils/typography';
+import {
   CardDefinitionSchema,
   ControlDefinitionSchema,
   InspectorFieldDefinitionSchema,
@@ -68,7 +76,7 @@ const switchField = (
   ...options,
 });
 
-const readonlyField = (
+const numberField = (
   id: string,
   label: string,
   path: string,
@@ -76,9 +84,8 @@ const readonlyField = (
 ): InspectorFieldInput => ({
   id,
   label,
-  kind: 'readonly',
+  kind: 'number',
   path,
-  readOnly: true,
   ...options,
 });
 
@@ -98,6 +105,12 @@ const commonThemeSupport = {
     '--theme-radius-panel',
   ],
 };
+
+const BORDER_STYLE_OPTIONS = [
+  { label: 'Solid', value: 'solid' },
+  { label: 'None', value: 'transparent' },
+  { label: 'Parent controlled', value: 'parent' },
+] as const;
 
 const runtime = (rendererKey: string, sourceComponent: string, importPath: string, flags = {}) => ({
   rendererKey,
@@ -123,7 +136,7 @@ const layoutSection = {
   id: 'layout',
   title: 'Layout',
   scope: ['control' as const, 'card' as const],
-  priority: 20,
+  priority: 40,
   fields: [
     {
       id: 'auto-occupy-row',
@@ -135,27 +148,79 @@ const layoutSection = {
   ],
 };
 
+const typographySection = {
+  id: 'typography',
+  title: 'Typography',
+  scope: ['control' as const, 'card' as const],
+  priority: 20,
+  fields: [
+    selectField('font-family', 'Font', 'props.fontFamily', [...TYPOGRAPHY_FONT_OPTIONS]),
+    switchField('children-follow-font', 'Internal follow', 'props.childrenFollowFont'),
+    textField('font-size', 'Size', 'props.fontSize', {
+      placeholder: '16px',
+    }),
+    selectField('font-weight', 'Weight', 'props.fontWeight', [...TYPOGRAPHY_WEIGHT_OPTIONS]),
+    {
+      id: 'font-style',
+      label: 'Style',
+      kind: 'segmented' as const,
+      path: 'props.fontStyle',
+      options: [...TYPOGRAPHY_STYLE_OPTIONS],
+    },
+    {
+      id: 'text-align',
+      label: 'Alignment',
+      kind: 'segmented' as const,
+      path: 'props.textAlign',
+      options: [...TYPOGRAPHY_ALIGNMENT_OPTIONS],
+    },
+    {
+      id: 'text-transform',
+      label: 'Case',
+      kind: 'segmented' as const,
+      path: 'props.textTransform',
+      options: [...TYPOGRAPHY_CASE_OPTIONS],
+    },
+    {
+      id: 'text-decoration',
+      label: 'Decoration',
+      kind: 'segmented' as const,
+      path: 'props.textDecoration',
+      options: [...TYPOGRAPHY_DECORATION_OPTIONS],
+    },
+  ],
+};
+
+const controlFrameSection = {
+  id: 'frame',
+  title: 'Border',
+  scope: ['control' as const],
+  priority: 25,
+  fields: [
+    selectField('border-style', 'Border', 'props.borderStyle', [...BORDER_STYLE_OPTIONS]),
+  ],
+};
+
+const cardFrameSection = {
+  id: 'frame',
+  title: 'Border',
+  scope: ['card' as const],
+  priority: 25,
+  fields: [
+    selectField('control-border-style', 'Border', 'props.controlBorderStyle', [...BORDER_STYLE_OPTIONS]),
+    switchField('children-follow-border', 'Internal follow', 'props.childrenFollowBorder'),
+  ],
+};
+
 const handoffSection = {
   id: 'ai-handoff',
-  title: 'AI Handoff',
+  title: 'Handoff',
   scope: ['control' as const, 'card' as const],
   priority: 90,
   fields: [
     textareaField('ai-handover', 'Handoff Notes', 'props.aiHandover', {
       placeholder: 'Describe what AI coding should mount, fetch, or connect here.',
     }),
-  ],
-};
-
-const codeSection = {
-  id: 'code',
-  title: 'Code Mapping',
-  scope: ['control' as const, 'card' as const],
-  priority: 100,
-  defaultOpen: false,
-  fields: [
-    readonlyField('widget-type', 'Runtime Type', 'type'),
-    readonlyField('component-id', 'Component ID', 'id'),
   ],
 };
 
@@ -208,9 +273,10 @@ export const CONTROL_DEFINITIONS = [
           ]),
         ],
       },
+      typographySection,
+      controlFrameSection,
       layoutSection,
       handoffSection,
-      codeSection,
     ],
     themeSupport: commonThemeSupport,
     runtime: runtime('heading', 'WidgetRegistry.heading', 'src/builder/registry.tsx'),
@@ -250,9 +316,10 @@ export const CONTROL_DEFINITIONS = [
           textareaField('paragraph-content', 'Content', 'props.text'),
         ],
       },
+      typographySection,
+      controlFrameSection,
       layoutSection,
       handoffSection,
-      codeSection,
     ],
     themeSupport: commonThemeSupport,
     runtime: runtime('text', 'WidgetRegistry.text', 'src/builder/registry.tsx'),
@@ -316,9 +383,10 @@ export const CONTROL_DEFINITIONS = [
           ]),
         ],
       },
+      typographySection,
+      controlFrameSection,
       layoutSection,
       handoffSection,
-      codeSection,
     ],
     themeSupport: commonThemeSupport,
     runtime: runtime('text_input', 'WidgetRegistry.text_input', 'src/builder/registry.tsx', {
@@ -379,9 +447,10 @@ export const CONTROL_DEFINITIONS = [
           ]),
         ],
       },
+      typographySection,
+      controlFrameSection,
       layoutSection,
       handoffSection,
-      codeSection,
     ],
     themeSupport: commonThemeSupport,
     runtime: runtime('number_input', 'WidgetRegistry.number_input', 'src/builder/registry.tsx', {
@@ -429,9 +498,10 @@ export const CONTROL_DEFINITIONS = [
           }),
         ],
       },
+      typographySection,
+      controlFrameSection,
       layoutSection,
       handoffSection,
-      codeSection,
     ],
     themeSupport: commonThemeSupport,
     runtime: runtime('textarea', 'WidgetRegistry.textarea', 'src/builder/registry.tsx', {
@@ -439,6 +509,181 @@ export const CONTROL_DEFINITIONS = [
       supportsActions: true,
     }),
     export: exportSpec('textarea'),
+  }),
+  control({
+    base: {
+      id: 'control-select',
+      type: 'select',
+      layer: 'control',
+      name: 'Select',
+      source: 'native',
+      category: 'form',
+      description: 'A select control with label, placeholder, and state binding.',
+      stableKey: 'control-select',
+      contractRole: 'control.form.select',
+    },
+    family: 'form',
+    widgetType: 'select',
+    defaultProps: {
+      label: 'Select',
+      placeholder: 'Choose...',
+    },
+    layoutDefaults: {
+      w: 12,
+      h: 4,
+      minW: 8,
+      minH: 3,
+    },
+    propertyGroups: [],
+    inspector: [
+      {
+        id: 'content',
+        title: 'Content',
+        scope: ['control'],
+        priority: 10,
+        fields: [
+          textField('select-label', 'Label', 'props.label'),
+          textField('select-placeholder', 'Placeholder', 'props.placeholder'),
+          textField('state-key', 'State Key', 'props.stateKey', {
+            placeholder: 'form.profile.role',
+          }),
+        ],
+      },
+      typographySection,
+      controlFrameSection,
+      layoutSection,
+      handoffSection,
+    ],
+    themeSupport: commonThemeSupport,
+    runtime: runtime('select', 'WidgetRegistry.select', 'src/builder/registry.tsx', {
+      supportsBindings: true,
+      supportsActions: true,
+    }),
+    export: exportSpec('select'),
+  }),
+  control({
+    base: {
+      id: 'control-checkbox',
+      type: 'checkbox',
+      layer: 'control',
+      name: 'Checkbox',
+      source: 'native',
+      category: 'form',
+      description: 'A checkbox group control with label and options.',
+      stableKey: 'control-checkbox',
+      contractRole: 'control.form.checkbox',
+    },
+    family: 'form',
+    widgetType: 'checkbox',
+    defaultProps: {
+      label: 'Choose options',
+      direction: 'vertical',
+    },
+    layoutDefaults: {
+      w: 12,
+      h: 6,
+      minW: 8,
+      minH: 4,
+    },
+    propertyGroups: [],
+    inspector: [
+      {
+        id: 'content',
+        title: 'Content',
+        scope: ['control'],
+        priority: 10,
+        fields: [
+          textField('checkbox-label', 'Label', 'props.label'),
+          textField('state-key', 'State Key', 'props.stateKey', {
+            placeholder: 'form.preferences.channels',
+          }),
+        ],
+      },
+      {
+        id: 'style',
+        title: 'Style',
+        scope: ['control'],
+        priority: 30,
+        fields: [
+          selectField('direction', 'Direction', 'props.direction', [
+            { label: 'Vertical', value: 'vertical' },
+            { label: 'Horizontal', value: 'horizontal' },
+          ]),
+        ],
+      },
+      typographySection,
+      controlFrameSection,
+      layoutSection,
+      handoffSection,
+    ],
+    themeSupport: commonThemeSupport,
+    runtime: runtime('checkbox', 'WidgetRegistry.checkbox', 'src/builder/registry.tsx', {
+      supportsBindings: true,
+      supportsActions: true,
+    }),
+    export: exportSpec('checkbox'),
+  }),
+  control({
+    base: {
+      id: 'control-radio',
+      type: 'radio',
+      layer: 'control',
+      name: 'Radio',
+      source: 'native',
+      category: 'form',
+      description: 'A radio group control with label and options.',
+      stableKey: 'control-radio',
+      contractRole: 'control.form.radio',
+    },
+    family: 'form',
+    widgetType: 'radio',
+    defaultProps: {
+      label: 'Select one',
+      direction: 'vertical',
+    },
+    layoutDefaults: {
+      w: 12,
+      h: 6,
+      minW: 8,
+      minH: 4,
+    },
+    propertyGroups: [],
+    inspector: [
+      {
+        id: 'content',
+        title: 'Content',
+        scope: ['control'],
+        priority: 10,
+        fields: [
+          textField('radio-label', 'Label', 'props.label'),
+          textField('state-key', 'State Key', 'props.stateKey', {
+            placeholder: 'form.plan.interval',
+          }),
+        ],
+      },
+      {
+        id: 'style',
+        title: 'Style',
+        scope: ['control'],
+        priority: 30,
+        fields: [
+          selectField('direction', 'Direction', 'props.direction', [
+            { label: 'Vertical', value: 'vertical' },
+            { label: 'Horizontal', value: 'horizontal' },
+          ]),
+        ],
+      },
+      typographySection,
+      controlFrameSection,
+      layoutSection,
+      handoffSection,
+    ],
+    themeSupport: commonThemeSupport,
+    runtime: runtime('radio', 'WidgetRegistry.radio', 'src/builder/registry.tsx', {
+      supportsBindings: true,
+      supportsActions: true,
+    }),
+    export: exportSpec('radio'),
   }),
   control({
     base: {
@@ -504,9 +749,9 @@ export const CONTROL_DEFINITIONS = [
           ]),
         ],
       },
+      controlFrameSection,
       layoutSection,
       handoffSection,
-      codeSection,
     ],
     themeSupport: commonThemeSupport,
     runtime: runtime('icon_button', 'WidgetRegistry.icon_button', 'src/builder/registry.tsx', {
@@ -553,9 +798,10 @@ export const CONTROL_DEFINITIONS = [
           textField('label', 'Label', 'props.label'),
         ],
       },
+      typographySection,
+      controlFrameSection,
       layoutSection,
       handoffSection,
-      codeSection,
     ],
     themeSupport: commonThemeSupport,
     runtime: runtime('divider', 'WidgetRegistry.divider', 'src/builder/registry.tsx'),
@@ -610,9 +856,10 @@ export const CONTROL_DEFINITIONS = [
           ]),
         ],
       },
+      typographySection,
+      controlFrameSection,
       layoutSection,
       handoffSection,
-      codeSection,
     ],
     themeSupport: commonThemeSupport,
     runtime: runtime('button', 'WidgetRegistry.button', 'src/builder/registry.tsx', {
@@ -666,8 +913,8 @@ export const CARD_DEFINITIONS = [
           textField('trend', 'Trend', 'props.trend'),
         ],
       },
+      typographySection,
       handoffSection,
-      codeSection,
     ],
     runtime: runtime('stat', 'WidgetRegistry.stat', 'src/builder/registry.tsx'),
     export: exportSpec('stat', 'card'),
@@ -719,8 +966,8 @@ export const CARD_DEFINITIONS = [
           ]),
         ],
       },
+      typographySection,
       handoffSection,
-      codeSection,
     ],
     runtime: runtime('chart', 'WidgetRegistry.chart', 'src/builder/registry.tsx', {
       supportsBindings: true,
@@ -775,8 +1022,8 @@ export const CARD_DEFINITIONS = [
           }),
         ],
       },
+      typographySection,
       handoffSection,
-      codeSection,
     ],
     runtime: runtime('calendar', 'WidgetRegistry.calendar', 'src/builder/registry.tsx', {
       supportsBindings: true,
@@ -823,22 +1070,70 @@ export const CARD_DEFINITIONS = [
     },
     inspector: [
       {
-        id: 'content',
-        title: 'Card Shell',
+        id: 'structure',
+        title: 'Structure',
         scope: ['card'],
         priority: 10,
         fields: [
-          textField('title', 'Title', 'props.title'),
+          textField('title', 'Header Text', 'props.title'),
           selectField('layout-mode', 'Layout', 'props.layoutMode', [
             { label: 'Grid', value: 'grid' },
             { label: 'Flex Row', value: 'flex-row' },
             { label: 'Flex Column', value: 'flex-col' },
           ]),
           switchField('show-header', 'Show Header', 'props.showHeader'),
+          switchField('show-footer', 'Show Footer', 'props.showFooter'),
+          textField('footer-text', 'Footer Text', 'props.footerText'),
+        ],
+      },
+      typographySection,
+      cardFrameSection,
+      {
+        id: 'overflow',
+        title: 'Overflow',
+        scope: ['card'],
+        priority: 20,
+        fields: [
+          switchField('scrollbar', 'Enable Scrollbar', 'props.scrollable', {
+            description: 'Off means the card shell grows with its inner content instead of scrolling.',
+          }),
+        ],
+      },
+      {
+        id: 'spacing',
+        title: 'Spacing',
+        scope: ['card'],
+        priority: 30,
+        fields: [
+          switchField('padding-horizontal-link', 'Horizontal Same', 'props.linkHorizontalPadding', {
+            description: 'Keep left and right padding in sync.',
+          }),
+          numberField('padding-left', 'Padding Left', 'props.paddingLeft', {
+            description: 'Left inner padding in px.',
+            meta: { min: 0 },
+          }),
+          numberField('padding-right', 'Padding Right', 'props.paddingRight', {
+            description: 'Right inner padding in px.',
+            meta: { min: 0 },
+          }),
+          switchField('padding-vertical-link', 'Vertical Same', 'props.linkVerticalPadding', {
+            description: 'Keep top and bottom padding in sync.',
+          }),
+          numberField('padding-top', 'Padding Top', 'props.paddingTop', {
+            description: 'Top inner padding in px.',
+            meta: { min: 0 },
+          }),
+          numberField('padding-bottom', 'Padding Bottom', 'props.paddingBottom', {
+            description: 'Bottom inner padding in px.',
+            meta: { min: 0 },
+          }),
+          numberField('gap', 'Gap', 'props.gap', {
+            description: 'Spacing between controls in px.',
+            meta: { min: 0 },
+          }),
         ],
       },
       handoffSection,
-      codeSection,
     ],
     runtime: runtime('panel', 'WidgetRegistry.panel', 'src/builder/registry.tsx', {
       acceptsChildren: true,
@@ -890,8 +1185,8 @@ export const CARD_DEFINITIONS = [
           textField('alternate-action', 'Alternate Action', 'props.alternateActionLabel'),
         ],
       },
+      typographySection,
       handoffSection,
-      codeSection,
     ],
     runtime: runtime('shadcn_login_card', 'ShadcnLoginCardWidget', 'src/components/community/ShadcnLoginCardWidget.tsx', {
       supportsActions: true,

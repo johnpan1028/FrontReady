@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useState } from 'react';
 
-export function useContainerWidth(options: { minDelta?: number; trackHeight?: boolean } = {}) {
-  const { minDelta = 1, trackHeight = true } = options;
+export function useContainerWidth(options: { minDelta?: number; trackHeight?: boolean; measureMode?: 'visual' | 'layout' } = {}) {
+  const { minDelta = 1, trackHeight = true, measureMode = 'visual' } = options;
   const [width, setWidth] = useState(1200);
   const [height, setHeight] = useState(800);
   const [mounted, setMounted] = useState(false);
@@ -15,8 +15,8 @@ export function useContainerWidth(options: { minDelta?: number; trackHeight?: bo
     if (!element) return;
 
     const rect = element.getBoundingClientRect();
-    const nextWidth = Math.floor(rect.width);
-    const nextHeight = Math.floor(rect.height);
+    const nextWidth = Math.floor(measureMode === 'layout' ? element.clientWidth || rect.width : rect.width);
+    const nextHeight = Math.floor(measureMode === 'layout' ? element.clientHeight || rect.height : rect.height);
     if (nextWidth <= 0) return;
     if (trackHeight && nextHeight > 0) {
       setHeight((currentHeight) => (
@@ -27,7 +27,7 @@ export function useContainerWidth(options: { minDelta?: number; trackHeight?: bo
     setWidth((currentWidth) => (
       Math.abs(currentWidth - nextWidth) >= minDelta ? nextWidth : currentWidth
     ));
-  }, [element, minDelta, trackHeight]);
+  }, [element, measureMode, minDelta, trackHeight]);
 
   useLayoutEffect(() => {
     setMounted(true);

@@ -92,7 +92,7 @@
 - 状态：`deferred`
 - 优先级：`low`
 - 首次记录时间：`2026-04-15`
-- 最近更新时间：`2026-04-15`
+- 最近更新时间：`2026-04-21`
 - 来源：`scripts/verify-page-topology.ts`
 
 #### 现象
@@ -165,7 +165,7 @@
 - 状态：`resolved`
 - 优先级：`medium`
 - 首次记录时间：`2026-04-15`
-- 最近更新时间：`2026-04-15`
+- 最近更新时间：`2026-04-21`
 - 来源：`Kit Studio` 实际操作验证 / `card_shadcn_login`
 
 #### 现象
@@ -186,7 +186,8 @@
 - 当前 `heading / text_input / button / card shell` 的 definition-driven 编辑链路已经可用
 - 问题集中在“模板导入后的复合 card 根节点仍是 `panel`，但业务语义实际上是 `shadcn login card`”
 - 也就是说，**复合卡片语义** 和 **根节点运行时类型** 还没有完全对齐
-- 本轮修复采用保留根 `panel` 壳、为复合卡片增加专属内容面板的方案；内容字段直连其子控件 props
+- 早前曾临时采用“根层补一个 `Composite Content`”的折中方案
+- 但从当前 Card Shell / Control 架构看，这会把子控件职责重新揉回根壳，不符合后续进口组件适配约束
 
 #### 相关文件
 
@@ -203,15 +204,11 @@
 
 #### 当前处理决定
 
-- 已修复最小可用链路
+- 当前采用“壳/控件分治”而非“根层合并配置”
 - 保留 `panel` 根壳，不破坏当前模板渲染与嵌套编辑结构
-- `Composite Content` 面板直接编辑子控件：
-  - `shadcn.card.login.title`
-  - `shadcn.card.login.description`
-  - `shadcn.card.login.submit`
-  - `shadcn.card.login.google`
-  - `shadcn.card.login.signup`
-- 后续仍可继续评估是否把复合 card 根节点升级为独立运行时类型
+- 右侧栏不再通过根卡片额外暴露 `Composite Content`
+- 根层只显示 `Card Shell` 自身配置；标题、描述、按钮等内容改为选中实际子控件后分别配置
+- 后续仍可继续评估是否把复合 card 根节点升级为独立运行时类型，但不能再回到把子控件字段捏进根壳 Inspector 的做法
 
 #### 重开条件
 
@@ -223,19 +220,19 @@
 
 #### 维修方案
 
-- 当前状态：`已采用方案 B`
+- 当前状态：`已按架构约束回退临时方案`
 - 保留 `panel` 根壳，避免破坏现有嵌套渲染
-- 增加 `Composite Content` 面板，以 `contractKey` 定位子控件并直接更新子控件 props
-- `getStudioWidgetDefinition()` 支持识别复合卡片身份，但当前 UI 层仍保留专属内容面板以避免通用根壳字段和复合内容字段混淆
+- 删除根层 `Composite Content` 合并面板
+- 根层 Inspector 恢复为纯 `Card Shell`
+- 标题、描述、按钮、输入框等内容统一通过各自子控件的 Inspector 编辑
 
 #### 修复后回填项
 
-- 根因确认：`card_shadcn_login` 的根节点是 `panel`，真实可编辑内容在子控件上；原 Inspector 只按根节点类型渲染字段
-- 最终采用的复合 card 映射方案：保留根 `panel`，增加复合内容面板并通过子控件 `contractKey` 写入 props
+- 根因确认：`card_shadcn_login` 的根节点是 `panel`，真实可编辑内容在子控件上；把子控件字段并入根壳 Inspector 会打破 card shell / control 的职责边界
+- 最终采用的复合 card 映射方案：保留根 `panel`，根层仅负责 `Card Shell`；内容字段回到各自子控件 Inspector
 - 实际改动文件清单：
   - `src/components/builder-page/WidgetInspectorPanel.tsx`
   - `src/pages/BuilderPage.tsx`
-  - `src/kit/definitions/widgetDefinitions.ts`
 - 验证覆盖的复合卡片列表：
   - `card_shadcn_login`
 
@@ -328,7 +325,8 @@
 
 - `2026-04-15`：在 Kit Studio 实际验证中发现，`Shadcn Login` 模板可创建但 Inspector 仍命中通用 `panel` 壳定义，复合卡片字段暂不可直接编辑
 - `2026-04-15`：开始修复，先补复合卡片内容面板与子控件 props 映射链路
-- `2026-04-15`：修复完成，已通过 Kit Studio 实操回归；`Title / Description / Primary Action / Secondary Action / Alternate Action` 均可从右侧面板更新到画布内容
+- `2026-04-15`：先行采用临时方案，在根壳 Inspector 增加 `Composite Content`
+- `2026-04-21`：根据 Card Shell / Control 架构约束回退该临时方案；Shadcn Login 根层恢复为纯 `Card Shell` Inspector，内容字段改回各子控件独立编辑
 
 ---
 
@@ -2220,6 +2218,576 @@
 - `2026-04-20`：继续收到“没影子了”的人工反馈；浏览器截图确认 DOM 仍在，但落点影子视觉对比度偏低，于是增强 `.kit-board-drop-preview` 的边框、填充和阴影强度，并重启 `3002` 复测
 - `2026-04-20`：补充固定浏览器回测脚本并实测通过，输出 `temp/kit-studio-root-preview-width-verify.png`
 
+---
+
+### 23. 右侧属性栏 Size / Pixel Constraints 分组顺序调整
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-20`
+- 最近更新时间：`2026-04-20`
+- 来源：`Kit Studio` 实操反馈 / `src/components/builder-page/WidgetInspectorPanel.tsx`
+
+#### 现象
+
+- 右侧属性栏中 `Size` 与 `Pixel Constraints` 分组位于 definition inspector 前部
+- 用户要求这组尺寸相关配置移动到 `Border` 分组上方，调整为更符合编辑顺序的布局
+
+#### 当前判断
+
+- 这是 inspector 展示顺序问题，不涉及布局算法、拖拽、尺寸计算或字段写入逻辑
+- `Size / Pixel Constraints` 是 `WidgetInspectorPanel` 的外层固定分组
+- `Border` 来自 definition inspector 的 `frame` section，因此需要支持在 definition section 前插入外部自定义分组
+
+#### 相关文件
+
+- `src/components/builder-page/WidgetInspectorPanel.tsx`
+- `src/kit/inspector/StudioDefinitionInspector.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- Kit Studio 控件右侧属性栏分组顺序
+- 控件配置时尺寸与边框相关字段的阅读路径
+
+#### 当前处理决定
+
+- 已完成最小改动
+- 不改字段定义、不改字段值、不改 `Border` 本身逻辑
+- 仅调整有 `Border` section 的 definition inspector 渲染顺序
+
+#### 重开条件
+
+- `Size / Pixel Constraints` 再次出现在属性栏顶部而不是 `Border` 上方
+- 新增控件 definition 后，带 `Border` 的控件未按新顺序渲染
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `StudioDefinitionInspector` 增加 `renderBeforeSection` 插槽能力
+- `WidgetInspectorPanel` 将 `Size / Pixel Constraints` 抽成可插入分组
+- 当 definition 存在 `frame / Border` section 时，把尺寸相关分组插入到 `Border` 前
+- 没有 `Border` section 的组件维持原先外层顺序
+
+#### 修复后回填项
+
+- 根因确认：尺寸分组是外层固定渲染，无法自然落在 definition inspector 内部的 `Border` 前
+- 实际改动文件清单：
+  - `src/components/builder-page/WidgetInspectorPanel.tsx`
+  - `src/kit/inspector/StudioDefinitionInspector.tsx`
+  - `docs/debug-record.md`
+- 验证方式：
+  - `npm run lint -- --pretty false`
+  - 浏览器实测 `Heading` 控件右侧属性栏顺序为 `Control -> Content -> Typography -> Size -> Pixel Constraints -> Border -> Layout -> Handoff -> Bindings -> Actions`
+  - `npm run verify:kit-inspector`
+
+#### 更新日志
+
+- `2026-04-20`：收到右侧属性栏分组顺序调整反馈，要求将截图中的尺寸配置块移动到 `Border` 上方
+- `2026-04-20`：完成 inspector 插槽与分组顺序调整，并通过浏览器读取 section 顺序确认生效
+
+---
+
+### 24. Alignment 最后一个选项未实现“拉伸占行”效果
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-20`
+- 最近更新时间：`2026-04-20`
+- 来源：`Kit Studio` 实操反馈 / `src/utils/typography.ts`
+
+#### 现象
+
+- `Typography -> Alignment` 的最后一个选项当前使用 `J / justify` 图形表示
+- 但实际在画布中切换后，效果与左对齐几乎一致
+- 用户预期该选项的语义应为“拉伸占行”，而不是无变化
+
+#### 当前判断
+
+- 问题不是 inspector 按钮无效，而是运行时缺少 `justify/stretch` 的专门渲染语义
+- 当前实现里：
+  - `left / center / right` 会映射到 flex 对齐类
+  - `justify` 没有单独实现，最终会回退到左对齐
+- 文本类控件如果只依赖原生 `text-align: justify`，单行内容也难以产生明显拉伸效果
+
+#### 相关文件
+
+- `src/utils/typography.ts`
+- `src/builder/registry.tsx`
+- `src/runtime/RuntimeRegistry.tsx`
+- `src/index.css`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- Kit Studio 中 `Heading / Text / Button / Card Shell Header/Footer` 的最后一个对齐选项
+- 运行时页面与编辑态画布的对齐语义一致性
+
+#### 当前处理决定
+
+- 最终按产品决定移除该效果
+- `Alignment` 只保留 `左 / 中 / 右`
+- 历史上已写入的 `justify` 值统一回退为 `left`
+- 不改控件布局尺寸、拖拽、占行规则
+
+#### 重开条件
+
+- `Alignment` 面板再次出现第 4 个选项
+- 历史 `justify` 值没有正确回退为左对齐
+- 后续如果产品重新决定恢复 `Stretch / Fill`，可在这条记录上继续演进
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `typography.ts`：
+  - 移除 `Alignment` 的第 4 个选项
+  - 将历史 `justify` 值统一规范化为 `left`
+- `builder/registry.tsx` 与 `runtime/RuntimeRegistry.tsx`：
+  - 移除上一版临时加入的 `stretch` 渲染分支
+- `index.css`：
+  - 移除 `justify/stretch` 对应的 inspector 图形和运行时样式
+
+#### 修复后回填项
+
+- 根因确认：最后一个对齐选项的产品语义并不稳定；继续保留会引入额外实现和理解偏差，因此按最终要求直接收敛为三态对齐
+- 实际改动文件清单：
+  - `src/utils/typography.ts`
+  - `src/builder/registry.tsx`
+  - `src/runtime/RuntimeRegistry.tsx`
+  - `src/index.css`
+  - `docs/debug-record.md`
+- 验证方式：
+  - `npm run lint -- --pretty false`
+  - 浏览器实测：`Alignment` 面板只剩 `L / C / R`
+  - 浏览器源码确认：不再暴露 `justify` 选项
+  - 历史 `justify` 值渲染时回退为左对齐
+  - `npm run verify:kit-inspector`
+  - `npm run build`
+
+#### 更新日志
+
+- `2026-04-20`：收到“Alignment 最后一个效果应为拉伸占行，但当前未实现”的反馈
+- `2026-04-20`：补充 `justify/stretch` 语义分支，并通过浏览器实测确认最后一个选项已进入拉伸态
+- `2026-04-20`：根据最终产品决定移除该效果，只保留 `左 / 中 / 右` 三态对齐，并将历史 `justify` 值统一回退为左对齐
+
+---
+
+### 25. 控件默认占行状态与底布缩放柄不一致
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-20`
+- 最近更新时间：`2026-04-20`
+- 来源：`src/builder/widgetConfig.ts`
+
+#### 现象
+
+- 新增控件默认会勾选 `Auto occupy row`
+- 控件落在 Kit Studio 底布后看不到右下角缩放柄，只有卡内控件或 Card Shell 才能缩放
+
+#### 当前判断
+
+- 控件默认行为与当前产品目标不一致：应默认允许非占行布局，便于后续同排组合
+- 底布缩放能力不是布局引擎缺失，而是根层 `WidgetWrapper` 只给根层 `panel` 渲染了自定义缩放柄，普通控件被条件分支排除了
+- 卡内新增控件还有两处紧凑布局入口硬编码成 `autoOccupyRow: true`，会让默认值与实际落地行为不一致
+
+#### 相关文件
+
+- `src/builder/widgetConfig.ts`
+- `src/components/NestedCanvas.tsx`
+- `src/builder/WidgetWrapper.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- Kit Studio 左侧新增控件后的默认布局行为
+- 控件从左侧拖入卡内时的初始宽度与占行状态
+- 控件在底布上的尺寸调整能力
+
+#### 当前处理决定
+
+- 将控件默认 `Auto occupy row` 改为未勾选
+- 同步修正卡内新增控件的默认紧凑布局入口，避免仍按占行宽度落地
+- 保持 Card Shell 原有缩放逻辑不变，只补开底布普通控件的同套缩放柄
+
+#### 重开条件
+
+- 新增控件后右侧栏仍默认勾选 `Auto occupy row`
+- 控件从左侧拖入卡内后仍直接铺满整行
+- 控件在底布选中后仍不出现右下角缩放柄
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `widgetConfig.ts`：
+  - 将控件默认 `autoOccupyRow` 从 `true` 改为 `false`
+- `NestedCanvas.tsx`：
+  - 将卡内新增控件的两处紧凑布局默认行为从占行改为非占行
+- `WidgetWrapper.tsx`：
+  - 放开 Kit Studio 根层普通控件的右下角缩放柄
+  - 复用现有根层缩放逻辑，不改 Card Shell 已有缩放路径
+
+#### 修复后回填项
+
+- 根因确认：默认值、卡内新增入口、底布缩放柄渲染条件三处没有统一到同一套控件契约
+- 实际改动文件清单：
+  - `src/builder/widgetConfig.ts`
+  - `src/components/NestedCanvas.tsx`
+  - `src/builder/WidgetWrapper.tsx`
+  - `docs/debug-record.md`
+- 验证方式：
+  - 浏览器实测：新增控件后 `Auto occupy row` 默认未勾选
+  - 浏览器实测：控件在底布选中后出现右下角缩放柄并可调整尺寸
+  - `npm run verify:kit-inspector`
+  - `npm run lint -- --pretty false`
+
+#### 更新日志
+
+- `2026-04-20`：收到“控件默认不要勾选自动占行、底布控件也需要缩放柄”的反馈
+- `2026-04-20`：确认根因分别位于控件默认 props、卡内新增紧凑布局入口、根层控件缩放柄渲染条件
+- `2026-04-20`：按最小改动完成修复，并进入浏览器回测
+
+---
+
+### 26. 右侧栏 Size 未实时跟随缩放
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-21`
+- 最近更新时间：`2026-04-21`
+- 来源：`src/builder/WidgetWrapper.tsx`
+
+#### 现象
+
+- 在 Kit Studio 底布拖动右下角缩放柄时，画布中的控件/卡壳会变化
+- 但右侧栏 `Size -> Cols / Rows` 只在松手后才更新，拖动过程中不是实时值
+
+#### 当前判断
+
+- 右侧栏 `Size` 本身直接读取当前选中 layout
+- 根因不在 inspector，而在根层缩放逻辑：`WidgetWrapper` 在拖动中只改本地预览样式，直到 `pointerup` 才调用 `updateLayoutItem`
+- 因此 UI 已预览变化，但 inspector 没有拿到对应的实时尺寸预览，导致拖动中显示旧值
+
+#### 相关文件
+
+- `src/builder/WidgetWrapper.tsx`
+- `src/pages/BuilderPage.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- Kit Studio 底布 Card Shell 缩放
+- Kit Studio 底布普通控件缩放
+- 右侧栏 `Size` 与画布缩放的双向交互一致性
+
+#### 当前处理决定
+
+- 保留现有缩放预览样式逻辑
+- 在缩放过程中发出根层尺寸预览事件，让 inspector 读取实时 `Cols / Rows`
+- 不改 inspector 结构，不改松手后的最终 store 落地逻辑
+
+#### 重开条件
+
+- 拖动缩放柄时右栏 `Cols / Rows` 仍停留旧值
+- 拖动过程中右栏更新，但松手后最终值回跳
+- 实时写回导致缩放卡顿、闪烁或破坏既有尺寸约束
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `WidgetWrapper.tsx`：
+  - 在根层缩放 `pointermove` 的 `requestAnimationFrame` 中派发实时 `Cols / Rows` 预览事件
+  - 在 `pointerup` 后清除预览事件，并保留最终 `updateLayoutItem` 写回
+- `BuilderPage.tsx`：
+  - 监听根层尺寸预览事件
+  - 当当前选中项就是正在缩放的根层节点时，用预览值覆盖右栏 `Size` 展示
+
+#### 修复后回填项
+
+- 根因确认：缩放预览与 inspector 数据源分离，导致拖动中右栏拿不到实时尺寸
+- 实际改动文件清单：
+  - `src/builder/WidgetWrapper.tsx`
+  - `src/pages/BuilderPage.tsx`
+  - `docs/debug-record.md`
+- 验证方式：
+  - 浏览器实测：按住缩放柄拖动时，右栏 `Cols / Rows` 实时变化
+  - 浏览器实测：通过右栏直接改 `Cols / Rows` 后，画布尺寸同步变化
+  - `npm run verify:kit-inspector`
+  - `npm run lint -- --pretty false`
+  - `npm run build`
+
+#### 更新日志
+
+- `2026-04-21`：收到“右侧栏 size 数据要实时跟随缩放变化，形成双向交互”的反馈
+- `2026-04-21`：确认根因是根层缩放只在 `pointerup` 时提交 layout，拖动过程中 inspector 读取不到实时值
+- `2026-04-21`：收敛方案为“缩放预览事件 + inspector 预览覆盖 + 松手后最终 store 落地”
+- `2026-04-21`：完成实现并进入浏览器回测
+
+---
+
+### 27. 右侧栏 Spacing 配置区过高
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-21`
+- 最近更新时间：`2026-04-21`
+- 来源：`src/kit/inspector/StudioDefinitionInspector.tsx`
+
+#### 现象
+
+- Card Shell 的 `Spacing` 区块中，水平 padding 与垂直 padding 串行排列，占用 6 行
+- 右侧栏滚动压力偏大，配置密度不够紧凑
+
+#### 当前判断
+
+- 这是右侧栏展示结构问题，不涉及 Card Shell 的实际 padding / gap 算法
+- `Gap` 仍应单独保留一行，避免和 padding 语义混在一起
+
+#### 相关文件
+
+- `src/kit/inspector/StudioDefinitionInspector.tsx`
+- `src/index.css`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- Kit Studio 中 Card Shell 的 `Spacing` inspector 展示
+- 不影响布局计算、拖拽、缩放、滚动条和 padding 数据结构
+
+#### 当前处理决定
+
+- 将 `Horizontal Same + Left + Right` 作为水平小块
+- 将 `Vertical Same + Top + Bottom` 作为垂直小块
+- 两个小块并排显示，将 6 行压缩为 3 行；`Gap` 单独一行保持不变
+
+#### 重开条件
+
+- `Spacing` 区块再次退回 6 行串行排列
+- `Gap` 被合并进水平/垂直小块
+- 修改展示结构后影响 padding / gap 的读写
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `StudioDefinitionInspector.tsx`：
+  - 为 Card Shell 的 `spacing` section 增加专用紧凑渲染模板
+- `index.css`：
+  - 增加两列并排小块样式
+  - 保持 `Gap` 使用原来的完整单行宽度
+  - 移除不稳定的原生 number spinner，改成统一的自定义小步进按钮，避免紧凑布局下内部溢出
+- `InspectorPrimitives.tsx`：
+  - 新增统一的 `InspectorNumberInput`，供 inspector 内所有数字输入复用
+
+#### 修复后回填项
+
+- 根因确认：通用 inspector 串行渲染不适合四向 padding 的密集配置，而原生 number spinner 在不同环境里尺寸不稳定
+- 实际改动文件清单：
+  - `src/components/builder-page/InspectorPrimitives.tsx`
+  - `src/components/builder-page/WidgetInspectorPanel.tsx`
+  - `src/kit/inspector/StudioDefinitionInspector.tsx`
+  - `src/index.css`
+  - `docs/debug-record.md`
+- 验证方式：
+  - 浏览器实测：`Horizontal Same / Vertical Same` 并排
+  - 浏览器实测：`Padding Left / Padding Top` 并排，`Padding Right / Padding Bottom` 并排
+  - 浏览器实测：`Gap` 仍单独一行
+  - `KIT_STUDIO_VERIFY_URL=http://127.0.0.1:3000/ npm run verify:kit-inspector`
+  - `npm run lint -- --pretty false`
+
+#### 更新日志
+
+- `2026-04-21`：收到“把 Spacing 收紧，水平和垂直拆成 2 小块并排，Gap 保持单独一行”的反馈
+- `2026-04-21`：完成专用 inspector 布局和样式，并通过 3000 端口浏览器回测
+- `2026-04-21`：根据后续视觉反馈，放弃继续压原生 spinner，改为统一的自定义小步进按钮
+- `2026-04-21`：针对“小按钮内部溢出/看起来没变化”复测，确认按钮仍继承浏览器 `appearance: button`；已改为无原生外观、10px 宽自定义步进按钮
+
+---
+
+### 28. Card Shell 新增父级控制与内部跟随
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-21`
+- 最近更新时间：`2026-04-21`
+- 来源：`Kit Studio` 属性面板 / `Card Shell`
+
+#### 现象
+
+- 控件的 `Border` 只有 `Solid / None`
+- 卡壳无法统一驱动内部控件的边框与字体
+- 需要在卡壳右侧增加一层“父级控制”，减少批量调样式时逐个点控件的成本
+
+#### 当前判断
+
+- 这是 Card Shell -> child controls 的局部样式继承能力缺口
+- 不应把子控件属性重新写回根壳数据
+- 应保留控件独立属性，同时增加：
+  - 控件侧的可选继承模式
+  - 卡壳侧的批量跟随开关
+
+#### 相关文件
+
+- `src/kit/definitions/widgetDefinitions.ts`
+- `src/kit/inspector/StudioDefinitionInspector.tsx`
+- `src/builder/WidgetWrapper.tsx`
+- `src/runtime/RuntimeRegistry.tsx`
+- `src/runtime/RuntimeCanvas.tsx`
+- `src/runtime/RuntimeNode.tsx`
+- `src/index.css`
+
+#### 影响范围
+
+- 全部控件的 `Border` 配置选项
+- Card Shell 的 `Typography` 与 `Border` inspector 结构
+- 编辑态 Kit Studio 中子控件对父级字体/边框策略的即时跟随
+- 运行态 nested canvas 的字体跟随一致性
+
+#### 当前处理决定
+
+- 控件 `Font` / `Border` 新增 `Parent controlled`
+- Card Shell 新增独立 `Border` 分组
+- Card Shell 的 `Font` 与 `Border` 字段右侧新增 `Internal follow`
+- 跟随逻辑分两层：
+  - 父级 `Internal follow = true`：父级开放该属性的跟随通道
+  - 子控件 `Parent controlled`：子控件显式同意接收父级值
+  - 两者同时成立时才真正生效
+
+#### 重开条件
+
+- 控件 `Font / Border` 下拉缺失 `Parent controlled`
+- Card Shell 缺失 `Border` 分组或 `Internal follow`
+- 勾选卡壳跟随且子控件选择 `Parent controlled` 后，内部控件的边框/字体不实时变化
+- 嵌套 card 时 `Parent controlled` 无法继续向上解析
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `widgetDefinitions.ts`：
+  - 抽出统一 `BORDER_STYLE_OPTIONS`
+  - 控件 `Border` 增加 `Parent controlled`
+  - 控件 `Font` 增加 `Parent controlled`
+  - Card Shell 新增 `Border` section
+  - Typography 增加 `childrenFollowFont`
+- `StudioDefinitionInspector.tsx`：
+  - 为 `Font` / `Border` 增加右侧 inline checkbox
+  - panel 的 `Border` section 改为“选择器 + 跟随开关”同排展示
+- `WidgetWrapper.tsx`：
+  - 新增父级边框解析与编辑态有效 props 继承
+- `RuntimeCanvas.tsx` / `RuntimeNode.tsx` / `RuntimeRegistry.tsx`：
+  - 新增运行态字体/边框跟随透传，保持预览一致
+
+#### 修复后回填项
+
+- 根因确认：原系统只有控件本地样式，没有建立 Card Shell 到 child controls 的样式控制桥；同时需要避免父级勾选后无条件覆盖全部子控件
+- 实际改动文件清单：
+  - `src/kit/definitions/widgetDefinitions.ts`
+  - `src/kit/inspector/StudioDefinitionInspector.tsx`
+  - `src/components/builder-page/WidgetInspectorPanel.tsx`
+  - `src/builder/WidgetWrapper.tsx`
+  - `src/runtime/RuntimeRegistry.tsx`
+  - `src/runtime/RuntimeCanvas.tsx`
+  - `src/runtime/RuntimeNode.tsx`
+  - `src/index.css`
+  - `docs/debug-record.md`
+- 验证方式：
+  - `npm run lint -- --pretty false`
+  - `KIT_STUDIO_VERIFY_URL=http://127.0.0.1:3000/ npm run verify:kit-inspector`
+  - 浏览器实测：Card Shell `Typography -> Font` 右侧存在 `Internal follow`
+  - 浏览器实测：Card Shell `Border` 分组存在 `Internal follow`
+  - 浏览器实测：控件 `Font / Border` 下拉存在 `Parent controlled`
+  - 浏览器实测：仅父级勾选 `Internal follow` 时，未选 `Parent controlled` 的 Heading 保持原样
+  - 浏览器实测：Heading 选择 `Parent controlled` 后，卡壳 `Font=Geist + Internal follow` 使其字体变为 `Geist Variable`
+  - 浏览器实测：Heading 选择 `Parent controlled` 后，卡壳 `Border=None + Internal follow` 使其 wrapper 变为 `data-widget-border-style=\"transparent\"`
+
+#### 更新日志
+
+- `2026-04-21`：收到需求，要求为控件增加 `Parent controlled`，并让 Card Shell 提供 `Border / Font` 的内部跟随
+- `2026-04-21`：完成 inspector、编辑态继承链路与运行态透传，并通过 3000 浏览器回测
+- `2026-04-21`：根据补充约束收紧逻辑，改为“父级 follow + 子控件 Parent controlled”双向确认后才生效
+
+### 29. Parent controlled 默认值与内置模板未统一
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-21`
+- 最近更新时间：`2026-04-21`
+- 来源：`src/builder/widgetConfig.ts`
+
+#### 现象
+
+- 新增的 Card Shell 与 controls 已有“父级控制 / 内部跟随”能力，但新拖入的默认值没有统一对齐
+- 左侧 `Cards > Card Shell` 这类内置模板，实例化后仍可能沿用旧 props，而不是最新默认规则
+- 需要把“默认值策略”和“内置模板落地值”统一，否则后续批量导入 shadcn / 外部组件时会出现基座不一致
+
+#### 当前判断
+
+- 默认规则此前只落在部分 inspector / 运行态链路里，缺少创建新节点时的统一入口
+- `DEFAULT_WIDGET_PROPS` 与 `assetLibrary node()` 之间没有形成同一套默认 props 注入链
+
+#### 相关文件
+
+- `src/builder/widgetConfig.ts`
+- `src/builder/assetLibrary.ts`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 新建 Card Shell 的默认 Typography / Border 跟随行为
+- 新建 controls 的默认 Font / Border 取值
+- 左侧内置模板实例化后的初始 props 一致性
+
+#### 当前处理决定
+
+- 控件默认：
+  - `Font = Parent controlled`
+  - `Border = Parent controlled`
+- Card Shell 默认：
+  - `Font = Theme`
+  - `Typography Internal follow = true`
+  - `Border = Solid`
+  - `Border Internal follow = true`
+- 内置模板统一走 `cloneDefaultWidgetProps(type)` 注入默认 props，再叠加模板自定义字段
+
+#### 重开条件
+
+- 新拖入的 Card Shell 默认不是 `Theme + Internal follow`
+- 新拖入的 Heading / Button / Input 等控件默认不是 `Parent controlled`
+- 左侧内置模板实例与直接新建实例表现不一致
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `widgetConfig.ts`：
+  - 控件默认 `fontFamily` 改为 `parent`
+  - 控件默认 `borderStyle` 改为 `parent`
+  - Card Shell 默认 `fontFamily=theme`
+  - Card Shell 默认开启 `childrenFollowFont`
+  - Card Shell 默认 `controlBorderStyle=solid`
+  - Card Shell 默认开启 `childrenFollowBorder`
+- `assetLibrary.ts`：
+  - `node()` helper 统一 merge `cloneDefaultWidgetProps(type)`
+  - 保证左侧内置模板与直接新建控件共享同一默认值入口
+
+#### 修复后回填项
+
+- 根因确认：默认值规则没有在“创建新节点”和“内置模板实例化”两个入口同时收口，导致父级控制能力已存在，但默认落地仍旧分叉
+- 实际改动文件清单：
+  - `src/builder/widgetConfig.ts`
+  - `src/builder/assetLibrary.ts`
+  - `docs/debug-record.md`
+- 验证方式：
+  - 重启 `3000` 开发服，确认 `http://127.0.0.1:3000/src/builder/widgetConfig.ts?raw` 与 `http://127.0.0.1:3000/src/builder/assetLibrary.ts?raw` 已吐出最新源码
+  - 浏览器实测：根画布新拖入 `Heading`，右侧默认显示 `Font=Parent controlled`、`Border=Parent controlled`
+  - 浏览器实测：新拖入 `Card Shell`，右侧默认显示 `Font=Theme`、`Internal follow=checked`、`Border=Solid`、`Internal follow=checked`
+  - 浏览器实测：向 Card Shell 内拖入新的 `Heading`，右侧默认显示 `Font=Parent controlled`、`Border=Parent controlled`
+  - 浏览器实测：把 Card Shell `Font` 改为 `Serif`、`Border` 改为 `None` 后，卡内 Heading 实际变为 `Georgia / Times New Roman`，且 wrapper 变为 `data-widget-border-style="transparent"`
+  - 截图留档：`temp/default-parent-follow-verify.png`
+
+#### 更新日志
+
+- `2026-04-21`：补齐默认值策略，要求控件默认跟随父级、Card Shell 默认开启内部跟随
+- `2026-04-21`：把内置模板实例化入口接入 `cloneDefaultWidgetProps(type)`，消除模板与新建控件的默认值分叉
+- `2026-04-21`：完成 3000 浏览器回测并留档截图
 ---
 
 ## 后续新增记录模板
