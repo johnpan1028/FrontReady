@@ -6,7 +6,7 @@ import { Move } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { getWidgetFrameStyle } from '../runtime/frameStyle';
 import { createWidgetId } from '../core/projectDocument';
-import { getDefaultWidgetSize, isContainerWidget, type WidgetType } from './widgetConfig';
+import { doesWidgetFollowParentWidth, getDefaultWidgetMinSize, getDefaultWidgetSize, isContainerWidget, type WidgetType } from './widgetConfig';
 
 interface WidgetWrapperProps {
   id: string;
@@ -16,6 +16,7 @@ const KIT_DRAG_WIDGET_SIZE_MIME = 'application/x-kit-widget-size';
 const KIT_BOARD_HOST_SELECTOR = '[data-kit-board-host="true"]';
 const KIT_ROOT_DROP_PREVIEW_EVENT = 'kit-root-drop-preview';
 const KIT_ROOT_DRAG_SESSION_EVENT = 'kit-root-drag-session';
+const KIT_CROSS_CARD_PREVIEW_EVENT = 'kit-cross-card-drop-preview';
 const KIT_ROOT_RESIZE_PREVIEW_EVENT = 'kit-root-resize-preview';
 const NESTED_CANVAS_HOST_SELECTOR = '[data-nested-canvas-host="true"]';
 const ROOT_RESIZE_PREVIEW_HOST_SELECTOR = '.project-theme-scope--inline';
@@ -46,6 +47,11 @@ type LayoutItemShape = {
 type ParentStyleWidget = {
   parentId: string;
   props?: Record<string, unknown>;
+};
+
+const toGridNumber = (value: unknown, fallback = 0) => {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : fallback;
 };
 
 const normalizeBorderStyleValue = (value: unknown): 'solid' | 'transparent' | 'parent' => (
@@ -123,6 +129,49 @@ const findClosestContainerDropTarget = (source: EventTarget | Element | null) =>
   return null;
 };
 
+const findContainerDropTargetAtPoint = (
+  clientX: number,
+  clientY: number,
+  ignoreWidgetId?: string,
+) => {
+  const directTarget = findClosestContainerDropTarget(document.elementFromPoint(clientX, clientY));
+  if (directTarget && directTarget.widgetId !== ignoreWidgetId) {
+    return directTarget;
+  }
+
+  const fallbackTargets = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-builder-node-id][data-builder-node-type]'),
+  )
+    .map((element) => {
+      const widgetId = element.getAttribute('data-builder-node-id');
+      const widgetType = element.getAttribute('data-builder-node-type');
+      if (!widgetId || !widgetType || widgetId === ignoreWidgetId || !isContainerWidget(widgetType as WidgetType)) {
+        return null;
+      }
+
+      if (!isPointInsideElement(element, clientX, clientY)) {
+        return null;
+      }
+
+      const bounds = element.getBoundingClientRect();
+      return {
+        element,
+        widgetId,
+        widgetType: widgetType as WidgetType,
+        area: bounds.width * bounds.height,
+      };
+    })
+    .filter((target): target is {
+      element: HTMLElement;
+      widgetId: string;
+      widgetType: WidgetType;
+      area: number;
+    } => target !== null)
+    .sort((left, right) => left.area - right.area);
+
+  return fallbackTargets[0] ?? null;
+};
+
 const isNestedCanvasEventTarget = (source: EventTarget | Element | null) => (
   source instanceof Element && Boolean(source.closest(NESTED_CANVAS_HOST_SELECTOR))
 );
@@ -147,17 +196,43 @@ const clearKitRootDropPreview = () => {
   }));
 };
 
+const clearKitCrossCardPreview = () => {
+  window.dispatchEvent(new CustomEvent(KIT_CROSS_CARD_PREVIEW_EVENT, {
+    detail: { action: 'clear' },
+  }));
+};
+
+const showKitCrossCardPreview = (detail: {
+  action: 'show';
+  sourceContainerId: string;
+  targetContainerId: string;
+  sourceParentId?: string | null;
+  sourceLayoutItem?: { w?: number; h?: number; minW?: number; minH?: number } | null;
+  widgetMeta?: { type?: WidgetType; props?: Record<string, unknown> };
+  previewWidth?: number;
+  previewHeight?: number;
+}) => {
+  window.dispatchEvent(new CustomEvent(KIT_CROSS_CARD_PREVIEW_EVENT, {
+    detail,
+  }));
+};
+
 const dispatchKitRootDragSession = (
   action: 'start' | 'end',
   widgetId: string,
   widgetType: WidgetType | null,
+  size?: { width: number; height: number },
 ) => {
+  const detail = {
+    action,
+    widgetId,
+    widgetType,
+    ...(action === 'start' && size ? size : {}),
+  };
+
+  (window as any).__kitRootDragSession = action === 'start' ? detail : null;
   window.dispatchEvent(new CustomEvent(KIT_ROOT_DRAG_SESSION_EVENT, {
-    detail: {
-      action,
-      widgetId,
-      widgetType,
-    },
+    detail,
   }));
 };
 
@@ -172,6 +247,49 @@ const dispatchKitRootResizePreview = (
 const sortLayoutItems = (items: readonly LayoutItemShape[]) => (
   [...items].sort((left, right) => left.y - right.y || left.x - right.x || left.i.localeCompare(right.i))
 );
+
+const getNonFollowingChildRowSpan = (
+  layout: readonly LayoutItemShape[],
+  widgets: Record<string, { props?: Record<string, unknown> } | undefined>,
+) => {
+  const rowSpans = new Map<number, number>();
+
+  layout.forEach((rawItem) => {
+    const item = {
+      x: Math.max(0, Math.round(toGridNumber(rawItem.x))),
+      y: Math.max(0, Math.round(toGridNumber(rawItem.y))),
+      w: Math.max(1, Math.round(toGridNumber(rawItem.w, 1))),
+      h: Math.max(1, Math.round(toGridNumber(rawItem.h, 1))),
+      i: rawItem.i,
+    };
+
+    if (doesWidgetFollowParentWidth(widgets[item.i]?.props)) {
+      return;
+    }
+
+    const span = item.x + item.w;
+    for (let rowIndex = item.y; rowIndex < item.y + item.h; rowIndex += 1) {
+      rowSpans.set(rowIndex, Math.max(rowSpans.get(rowIndex) ?? 0, span));
+    }
+  });
+
+  return Array.from(rowSpans.values()).reduce((maxSpan, span) => Math.max(maxSpan, span), 0);
+};
+
+const resolvePanelRuntimeMinCols = ({
+  layout,
+  widgets,
+}: {
+  layout: readonly LayoutItemShape[];
+  widgets: Record<string, { props?: Record<string, unknown> } | undefined>;
+}) => {
+  if (layout.length === 0) return null;
+
+  const fixedRowSpan = getNonFollowingChildRowSpan(layout, widgets);
+  if (fixedRowSpan <= 0) return null;
+
+  return Math.max(1, Math.ceil(fixedRowSpan));
+};
 
 const reorderWidgetInSameContainer = (
   widgetId: string,
@@ -238,6 +356,7 @@ const resolveNestedDropLayoutItem = (
   targetParentId: string,
   sourceType: WidgetType,
   sourceLayoutItem: { w?: number; h?: number; minW?: number; minH?: number } | undefined,
+  sourceProps: Record<string, unknown> | undefined,
   widgets: Record<string, { parentId: string; type: WidgetType }>,
   layouts: Record<string, Array<{ i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number }>>,
 ) => {
@@ -254,8 +373,12 @@ const resolveNestedDropLayoutItem = (
     (maxY, item) => Math.max(maxY, Number(item.y ?? 0) + Number(item.h ?? 1)),
     0,
   );
-  const fallbackSize = getDefaultWidgetSize(sourceType, targetMaxCols);
-  const width = Math.min(targetMaxCols, Math.max(1, Number(sourceLayoutItem?.w ?? fallbackSize.w)));
+  const fallbackSize = getDefaultWidgetSize(sourceType);
+  const defaultMinSize = getDefaultWidgetMinSize(sourceType);
+  const followParentWidth = doesWidgetFollowParentWidth(sourceProps);
+  const width = followParentWidth
+    ? targetMaxCols
+    : Math.max(1, Number(sourceLayoutItem?.w ?? fallbackSize.w));
 
   return {
     i: itemId,
@@ -263,8 +386,8 @@ const resolveNestedDropLayoutItem = (
     y: nextChildY,
     w: width,
     h: Math.max(1, Number(sourceLayoutItem?.h ?? fallbackSize.h)),
-    minW: sourceLayoutItem?.minW,
-    minH: sourceLayoutItem?.minH,
+    minW: sourceLayoutItem?.minW ?? defaultMinSize.minW,
+    minH: sourceLayoutItem?.minH ?? defaultMinSize.minH,
   };
 };
 
@@ -384,9 +507,14 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
     itemId: string,
     sourceLayoutItem?: { w?: number; h?: number; minW?: number; minH?: number },
     widgetType?: WidgetType,
+    sourceProps?: Record<string, unknown>,
   ) => {
-    const fallbackSize = widgetType ? getDefaultWidgetSize(widgetType, targetMaxCols) : { w: 8, h: 4 };
-    const width = Math.min(targetMaxCols, Math.max(1, Number(sourceLayoutItem?.w ?? fallbackSize.w)));
+    const fallbackSize = widgetType ? getDefaultWidgetSize(widgetType) : { w: 8, h: 4 };
+    const defaultMinSize = widgetType ? getDefaultWidgetMinSize(widgetType) : { minW: 2, minH: 1 };
+    const followParentWidth = doesWidgetFollowParentWidth(sourceProps);
+    const width = followParentWidth
+      ? targetMaxCols
+      : Math.max(1, Number(sourceLayoutItem?.w ?? fallbackSize.w));
 
     return {
       i: itemId,
@@ -394,8 +522,8 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       y: nextChildY,
       w: width,
       h: Math.max(1, Number(sourceLayoutItem?.h ?? fallbackSize.h)),
-      minW: sourceLayoutItem?.minW,
-      minH: sourceLayoutItem?.minH,
+      minW: sourceLayoutItem?.minW ?? defaultMinSize.minW,
+      minH: sourceLayoutItem?.minH ?? defaultMinSize.minH,
     };
   };
 
@@ -451,7 +579,18 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
     const startWidthPx = bounds.width / viewportScale;
     const startHeightPx = bounds.height / viewportScale;
     const baseCols = Math.max(1, Number(targetLayoutItem.w ?? 1));
-    const minCols = Math.max(1, Number(targetLayoutItem.minW ?? 1));
+    const defaultMinSize = widgetType ? getDefaultWidgetMinSize(widgetType) : { minW: 2, minH: 1 };
+    const runtimeMinCols = canAcceptChildDrop
+      ? resolvePanelRuntimeMinCols({
+          layout: childLayout,
+          widgets: scopedWidgets,
+        })
+      : null;
+    const minCols = Math.max(
+      1,
+      Number(targetLayoutItem.minW ?? defaultMinSize.minW),
+      Number(runtimeMinCols ?? 1),
+    );
     const pixelPerCol = Math.max(1, startWidthPx / baseCols);
 
     resizeSessionRef.current = {
@@ -461,7 +600,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       startWidthPx,
       startHeightPx,
       minCols,
-      minRows: Math.max(1, Number(targetLayoutItem.minH ?? 1)),
+      minRows: Math.max(1, Number(targetLayoutItem.minH ?? defaultMinSize.minH)),
       pixelPerCol,
       pixelPerRow: Math.max(1, startHeightPx / Math.max(1, Number(targetLayoutItem.h ?? 1))),
       viewportScale,
@@ -580,6 +719,25 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
     const top = Math.round(clientY - dragProxyOffsetRef.current.y);
     dragProxy.style.transform = `translate3d(${left}px, ${top}px, 0)`;
 
+    const targetContainer = scope === 'kit'
+      ? findContainerDropTargetAtPoint(clientX, clientY, id)
+      : null;
+    const sourceLayoutItem = scopedLayouts[widgetParentId]?.find((item) => item.i === id);
+    if (
+      scope === 'kit'
+      && isRootKitWidget
+      && widgetType
+      && targetContainer
+      && targetContainer.widgetId !== id
+    ) {
+      clearKitRootDropPreview();
+      return;
+    }
+
+    if (!isRootKitWidget) {
+      clearKitCrossCardPreview();
+    }
+
     const boardHost = document.querySelector<HTMLElement>(KIT_BOARD_HOST_SELECTOR);
     if (
       scope !== 'kit'
@@ -605,7 +763,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
         clientY,
       },
     }));
-  }, [id, isRootKitWidget, scope, widgetType]);
+  }, [id, isRootKitWidget, scope, scopedLayouts, widgetParentId, widgetProps, widgetType]);
 
   const cleanupDragProxy = useCallback(() => {
     if (dragProxyRef.current?.parentNode) {
@@ -613,6 +771,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
     }
     dragProxyRef.current = null;
     clearKitRootDropPreview();
+    clearKitCrossCardPreview();
   }, []);
 
   const ensureTransparentDragImage = useCallback(() => {
@@ -717,7 +876,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       moveWidget(
         movedWidgetId,
         id,
-        getNestedDropLayoutItem(movedWidgetId, sourceLayoutItem, sourceWidget.type),
+        getNestedDropLayoutItem(movedWidgetId, sourceLayoutItem, sourceWidget.type, sourceWidget.props),
         scope,
       );
       setDraggedType(null);
@@ -801,6 +960,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       targetContainer.widgetId,
       latestWidget.type,
       latestSourceLayoutItem,
+      latestWidget.props,
       kitStudioWidgets as Record<string, { parentId: string; type: WidgetType }>,
       kitStudioLayouts as Record<string, Array<{ i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number }>>,
     );
@@ -954,9 +1114,11 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
                 return;
               }
               e.stopPropagation();
-              dispatchKitRootDragSession('start', id, widgetType);
 
               const bounds = createDragProxy(e.clientX, e.clientY);
+              dispatchKitRootDragSession('start', id, widgetType, bounds
+                ? { width: bounds.width, height: bounds.height }
+                : undefined);
               if (bounds) {
                 e.dataTransfer.setDragImage(ensureTransparentDragImage(), 0, 0);
                 e.dataTransfer.setData(KIT_DRAG_WIDGET_SIZE_MIME, JSON.stringify({

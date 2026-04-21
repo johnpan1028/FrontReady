@@ -137,15 +137,7 @@ const layoutSection = {
   title: 'Layout',
   scope: ['control' as const, 'card' as const],
   priority: 40,
-  fields: [
-    {
-      id: 'auto-occupy-row',
-      label: 'Auto occupy row',
-      kind: 'switch' as const,
-      path: 'props.autoOccupyRow',
-      description: 'Let this control occupy the available card row width.',
-    },
-  ],
+  fields: [],
 };
 
 const typographySection = {
@@ -254,8 +246,8 @@ export const CONTROL_DEFINITIONS = [
     layoutDefaults: {
       w: 16,
       h: 3,
-      minW: 8,
-      minH: 2,
+      minW: 2,
+      minH: 1,
     },
     propertyGroups: [],
     inspector: [
@@ -302,8 +294,8 @@ export const CONTROL_DEFINITIONS = [
     layoutDefaults: {
       w: 16,
       h: 5,
-      minW: 8,
-      minH: 3,
+      minW: 2,
+      minH: 1,
     },
     propertyGroups: [],
     inspector: [
@@ -347,8 +339,8 @@ export const CONTROL_DEFINITIONS = [
     layoutDefaults: {
       w: 12,
       h: 4,
-      minW: 8,
-      minH: 3,
+      minW: 2,
+      minH: 1,
     },
     propertyGroups: [],
     inspector: [
@@ -417,8 +409,8 @@ export const CONTROL_DEFINITIONS = [
     layoutDefaults: {
       w: 12,
       h: 4,
-      minW: 8,
-      minH: 3,
+      minW: 2,
+      minH: 1,
     },
     propertyGroups: [],
     inspector: [
@@ -480,8 +472,8 @@ export const CONTROL_DEFINITIONS = [
     layoutDefaults: {
       w: 16,
       h: 6,
-      minW: 10,
-      minH: 4,
+      minW: 2,
+      minH: 1,
     },
     propertyGroups: [],
     inspector: [
@@ -531,8 +523,8 @@ export const CONTROL_DEFINITIONS = [
     layoutDefaults: {
       w: 12,
       h: 4,
-      minW: 8,
-      minH: 3,
+      minW: 2,
+      minH: 1,
     },
     propertyGroups: [],
     inspector: [
@@ -582,8 +574,8 @@ export const CONTROL_DEFINITIONS = [
     layoutDefaults: {
       w: 12,
       h: 6,
-      minW: 8,
-      minH: 4,
+      minW: 2,
+      minH: 1,
     },
     propertyGroups: [],
     inspector: [
@@ -644,8 +636,8 @@ export const CONTROL_DEFINITIONS = [
     layoutDefaults: {
       w: 12,
       h: 6,
-      minW: 8,
-      minH: 4,
+      minW: 2,
+      minH: 1,
     },
     propertyGroups: [],
     inspector: [
@@ -708,8 +700,8 @@ export const CONTROL_DEFINITIONS = [
     layoutDefaults: {
       w: 4,
       h: 3,
-      minW: 3,
-      minH: 3,
+      minW: 2,
+      minH: 1,
     },
     propertyGroups: [],
     inspector: [
@@ -780,7 +772,7 @@ export const CONTROL_DEFINITIONS = [
     layoutDefaults: {
       w: 12,
       h: 2,
-      minW: 6,
+      minW: 2,
       minH: 1,
     },
     propertyGroups: [],
@@ -828,8 +820,8 @@ export const CONTROL_DEFINITIONS = [
     layoutDefaults: {
       w: 8,
       h: 3,
-      minW: 5,
-      minH: 3,
+      minW: 2,
+      minH: 1,
     },
     propertyGroups: [],
     inspector: [

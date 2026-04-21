@@ -106,6 +106,7 @@ export const ControlLayoutDefaultsSchema = z.object({
   h: z.number().int().positive().optional(),
   minW: z.number().int().positive().optional(),
   minH: z.number().int().positive().optional(),
+  followParentWidth: z.boolean().optional(),
   autoOccupyRow: z.boolean().optional(),
 });
 

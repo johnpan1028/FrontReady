@@ -452,6 +452,7 @@ export function StudioDefinitionInspector({
   ...props
 }: StudioDefinitionInspectorProps) {
   const sections = [...definition.inspector]
+    .filter((section) => section.fields.length > 0)
     .sort((left, right) => left.priority - right.priority);
 
   return (

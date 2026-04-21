@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent } from 'react';
 import { ResponsiveGridLayout } from 'react-grid-layout';
 import { useContainerWidth } from '../hooks/useContainerWidth';
+import { doesWidgetFollowParentWidth, getDefaultWidgetMinSize } from '../builder/widgetConfig';
 import { BuilderWorkspaceScopeProvider, type BuilderWorkspaceScope } from '../builder/workspaceScope';
 import { useBuilderStore, WidgetType } from '../store/builderStore';
 import { useAppStore } from '../store/appStore';
@@ -485,7 +486,7 @@ export function BuilderPage() {
     && selectedWidget.type !== 'canvas'
     && selectedWidget.type !== 'shadcn_login_card',
   );
-  const selectedWidgetAutoOccupyRow = Boolean(selectedWidget?.props?.autoOccupyRow);
+  const selectedWidgetFollowParentWidth = doesWidgetFollowParentWidth(selectedWidget?.props);
   const selectedKitTemplateId = typeof selectedWidget?.props?.kitTemplateId === 'string'
     ? selectedWidget.props.kitTemplateId
     : null;
@@ -499,13 +500,20 @@ export function BuilderPage() {
     if (!activeSelectedId || !selectedWidget) return;
     updateLayoutItem(activeSelectedId, selectedWidget.parentId, updates, activeWorkspaceScope);
   };
-  const updateSelectedWidgetAutoOccupyRow = (checked: boolean) => {
+  const updateSelectedWidgetFollowParentWidth = (checked: boolean) => {
     if (!selectedWidget || !selectedLayoutItem) return;
-    updateSelectedWidgetProps({ autoOccupyRow: checked });
+    updateSelectedWidgetProps({
+      followParentWidth: checked,
+      autoOccupyRow: false,
+    });
+
+    if (!showCardLayoutControls) {
+      return;
+    }
+
     updateSelectedLayoutItem({
       x: checked ? 0 : Math.min(selectedLayoutItem.x ?? 0, Math.max(0, selectedCardControlMaxCols - Math.min(selectedLayoutItem.w ?? 1, selectedCardControlMaxCols))),
       w: checked ? selectedCardControlMaxCols : Math.min(selectedLayoutItem.w ?? 1, selectedCardControlMaxCols),
-      minW: checked ? selectedCardControlMaxCols : 1,
     });
   };
   const removeSelectedWidget = () => {
@@ -1551,6 +1559,7 @@ export function BuilderPage() {
                                   const widget = widgets[item.i];
                                   if (!widget) return <div key={item.i} />;
                                   const isSelected = selectedId === item.i;
+                                  const defaultMinSize = getDefaultWidgetMinSize(widget.type);
 
                                   return (
                                     <div
@@ -1560,8 +1569,8 @@ export function BuilderPage() {
                                         y: item.y,
                                         w: item.w,
                                         h: item.h,
-                                        minW: item.minW || 2,
-                                        minH: item.minH || 2,
+                                        minW: item.minW || defaultMinSize.minW,
+                                        minH: item.minH || defaultMinSize.minH,
                                       }}
                                       className={cn(isSelected && "z-10")}
                                     >
@@ -1771,11 +1780,11 @@ export function BuilderPage() {
                 selectedWidgetSourceName={selectedWidgetSourceName}
                 showCardLayoutControls={showCardLayoutControls}
                 selectedCardControlMaxCols={selectedCardControlMaxCols}
-                selectedWidgetAutoOccupyRow={selectedWidgetAutoOccupyRow}
+                selectedWidgetFollowParentWidth={selectedWidgetFollowParentWidth}
                 widgetInspectorFooter={widgetInspectorFooter}
                 updateSelectedWidgetProps={updateSelectedWidgetProps}
                 updateSelectedLayoutItem={updateSelectedLayoutItem}
-                updateSelectedWidgetAutoOccupyRow={updateSelectedWidgetAutoOccupyRow}
+                updateSelectedWidgetFollowParentWidth={updateSelectedWidgetFollowParentWidth}
                 handleCreateActionTargetPage={handleCreateActionTargetPage}
               />
             )}

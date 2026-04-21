@@ -11,6 +11,8 @@ import {
 } from '../builder/projectStarters';
 import {
   cloneDefaultWidgetProps,
+  getDefaultWidgetMinSize,
+  isContainerWidget,
   isWidgetType,
   type WidgetType,
 } from '../builder/widgetConfig';
@@ -260,6 +262,16 @@ const clampLayoutToParent = (
   return normalizeLayout(layout).map((item) => clampLayoutItemToCols(item, maxCols));
 };
 
+const shouldPreserveChildWidthForParentScope = (
+  widgets: Record<string, WidgetData>,
+  parentId: string,
+  scope: BuilderWorkspaceScope,
+) => (
+  scope === 'kit'
+  && parentId !== 'root'
+  && isContainerWidget(widgets[parentId]?.type ?? 'heading')
+);
+
 const normalizeLayoutForParentScope = (
   layout: readonly LegacyLayoutItem[],
   widgets: Record<string, WidgetData>,
@@ -267,7 +279,7 @@ const normalizeLayoutForParentScope = (
   parentId: string,
   scope: BuilderWorkspaceScope,
 ) => {
-  if (scope === 'kit' && parentId === 'root') {
+  if ((scope === 'kit' && parentId === 'root') || shouldPreserveChildWidthForParentScope(widgets, parentId, scope)) {
     return normalizeLayout(layout);
   }
 
@@ -282,7 +294,7 @@ const normalizeLayoutItemForParentScope = (
   scope: BuilderWorkspaceScope,
 ) => {
   const normalized = normalizeLayoutItem(item);
-  if (scope === 'kit' && parentId === 'root') {
+  if ((scope === 'kit' && parentId === 'root') || shouldPreserveChildWidthForParentScope(widgets, parentId, scope)) {
     return normalized;
   }
 
@@ -2420,6 +2432,7 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
     const currentWidgets = getWorkspaceWidgets(state, scope);
     const newLayouts = { ...currentLayouts };
     if (!newLayouts[parentId]) newLayouts[parentId] = [];
+    const defaultMinSize = getDefaultWidgetMinSize(type);
     const newWidgets = {
       ...currentWidgets,
       [id]: {
@@ -2430,7 +2443,11 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
       },
     };
     newLayouts[parentId] = normalizeLayoutForParentScope(
-      [...newLayouts[parentId], normalizeLayoutItem(layoutItem)],
+      [...newLayouts[parentId], normalizeLayoutItem({
+        ...layoutItem,
+        minW: layoutItem.minW ?? defaultMinSize.minW,
+        minH: layoutItem.minH ?? defaultMinSize.minH,
+      })],
       newWidgets,
       newLayouts,
       parentId,
@@ -2818,6 +2835,7 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
       if (!nodeType) return null;
 
       const layoutInput = rawNode?.layout ?? rawNode?.localLayout ?? {};
+      const defaultMinSize = getDefaultWidgetMinSize(nodeType);
       const newId = createWidgetId();
       const layoutItem = normalizeLayoutItem({
         i: newId,
@@ -2825,8 +2843,8 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
         y: positionOverride?.y ?? layoutInput.y ?? 0,
         w: positionOverride?.w ?? layoutInput.w ?? 4,
         h: positionOverride?.h ?? layoutInput.h ?? 4,
-        minW: positionOverride?.minW ?? layoutInput.minW,
-        minH: positionOverride?.minH ?? layoutInput.minH,
+        minW: positionOverride?.minW ?? layoutInput.minW ?? defaultMinSize.minW,
+        minH: positionOverride?.minH ?? layoutInput.minH ?? defaultMinSize.minH,
       });
 
       if (!nextLayouts[targetParentId]) nextLayouts[targetParentId] = [];

@@ -139,7 +139,7 @@ export const BUILT_IN_ASSET_TEMPLATES: BuiltInAssetTemplate[] = [
     data: node(
       'tpl_card_shell_base',
       'panel',
-      { x: 2, y: 2, w: 18, h: 12, minW: 12, minH: 8 },
+      { x: 2, y: 2, w: 18, h: 12, minW: 4, minH: 2 },
       {
         title: 'Header',
         showHeader: false,

@@ -386,12 +386,22 @@ body {
   transition: all 0.2s ease;
 }
 
-[data-nested-canvas-host='true'][data-kit-root-preview-active='true'] .react-grid-item.react-grid-placeholder {
+[data-nested-canvas-host='true'][data-kit-root-preview-active='true'] .react-grid-item.react-grid-placeholder:not(.kit-cross-card-drop-preview) {
   opacity: 0 !important;
   visibility: hidden;
 }
 
-[data-nested-canvas-host='true'][data-kit-cross-card-preview-source='true'] .react-grid-item.react-grid-placeholder {
+[data-nested-canvas-host='true'][data-kit-cross-card-preview-source='true'] .react-grid-item.react-grid-placeholder:not(.kit-cross-card-drop-preview) {
+  opacity: 0 !important;
+  visibility: hidden;
+}
+
+[data-nested-canvas-host='true'][data-kit-card-pixel-preview-active='true'] .react-grid-item.react-grid-placeholder:not(.kit-cross-card-drop-preview) {
+  opacity: 0 !important;
+  visibility: hidden;
+}
+
+body:has([data-widget-drag-proxy='true']) [data-nested-canvas-host='true'] .react-grid-item.react-grid-placeholder:not(.kit-cross-card-drop-preview) {
   opacity: 0 !important;
   visibility: hidden;
 }

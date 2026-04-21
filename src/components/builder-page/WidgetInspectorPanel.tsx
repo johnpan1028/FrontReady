@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { LegacyLayoutItem } from '../../core/projectDocument';
 import type { BuilderPage as BuilderPageDocument, DataBinding, NodeAction } from '../../schema/project';
 import type { WidgetData } from '../../store/builderStore';
+import { getDefaultWidgetMinSize } from '../../builder/widgetConfig';
 import { getStudioWidgetDefinition } from '../../kit/definitions/widgetDefinitions';
 import { StudioDefinitionInspector } from '../../kit/inspector/StudioDefinitionInspector';
 import {
@@ -28,11 +29,11 @@ export function WidgetInspectorPanel({
   selectedWidgetSourceName,
   showCardLayoutControls,
   selectedCardControlMaxCols,
-  selectedWidgetAutoOccupyRow,
+  selectedWidgetFollowParentWidth,
   widgetInspectorFooter,
   updateSelectedWidgetProps,
   updateSelectedLayoutItem,
-  updateSelectedWidgetAutoOccupyRow,
+  updateSelectedWidgetFollowParentWidth,
   handleCreateActionTargetPage,
 }: {
   selectedWidget: WidgetData | null;
@@ -48,11 +49,11 @@ export function WidgetInspectorPanel({
   selectedWidgetSourceName: string;
   showCardLayoutControls: boolean;
   selectedCardControlMaxCols: number;
-  selectedWidgetAutoOccupyRow: boolean;
+  selectedWidgetFollowParentWidth: boolean;
   widgetInspectorFooter: ReactNode;
   updateSelectedWidgetProps: (props: Record<string, unknown>) => void;
   updateSelectedLayoutItem: (updates: Partial<Pick<LegacyLayoutItem, 'x' | 'y' | 'w' | 'h' | 'minW' | 'minH'>>) => void;
-  updateSelectedWidgetAutoOccupyRow: (checked: boolean) => void;
+  updateSelectedWidgetFollowParentWidth: (checked: boolean) => void;
   handleCreateActionTargetPage: (kind: BuilderPageDocument['kind']) => BuilderPageDocument | null;
 }) {
   const selectedWidgetDefinition = selectedWidget
@@ -67,6 +68,19 @@ export function WidgetInspectorPanel({
     );
   }
   const showDefinitionInspector = Boolean(selectedWidgetDefinition);
+  const defaultMinSize = getDefaultWidgetMinSize(selectedWidget.type);
+  const canFollowParentWidth = selectedWidget.type !== 'panel' && selectedWidget.type !== 'canvas';
+  const widthFollowAccessory = canFollowParentWidth ? (
+    <label className="builder-inspector-inline-toggle">
+      <input
+        type="checkbox"
+        className="builder-inspector-inline-checkbox"
+        checked={selectedWidgetFollowParentWidth}
+        onChange={(event) => updateSelectedWidgetFollowParentWidth(event.target.checked)}
+      />
+      <span>Follow parent</span>
+    </label>
+  ) : null;
   const shouldInsertSizingBeforeBorder = Boolean(
     selectedWidget.type !== 'panel' &&
     selectedWidgetDefinition?.inspector.some((section) => section.id === 'frame' || section.title === 'Border'),
@@ -76,12 +90,12 @@ export function WidgetInspectorPanel({
       {selectedLayoutItem ? (
         <InspectorSection title="Size">
           <div className="grid grid-cols-2 gap-3">
-            <InspectorField label="Cols">
+            <InspectorField label="Cols" labelAccessory={widthFollowAccessory}>
               <InspectorNumberInput
                 min={1}
                 max={showCardLayoutControls ? selectedCardControlMaxCols : 48}
                 value={selectedLayoutItem.w || 1}
-                disabled={showCardLayoutControls && selectedWidgetAutoOccupyRow}
+                disabled={showCardLayoutControls && selectedWidgetFollowParentWidth}
                 onChange={(value) => updateSelectedLayoutItem({ w: value })}
               />
             </InspectorField>
@@ -98,8 +112,7 @@ export function WidgetInspectorPanel({
               <InspectorNumberInput
                 min={1}
                 max={showCardLayoutControls ? selectedCardControlMaxCols : 48}
-                value={selectedLayoutItem.minW || 1}
-                disabled={showCardLayoutControls && selectedWidgetAutoOccupyRow}
+                value={selectedLayoutItem.minW || defaultMinSize.minW}
                 onChange={(value) => updateSelectedLayoutItem({ minW: value })}
               />
             </InspectorField>
@@ -107,7 +120,7 @@ export function WidgetInspectorPanel({
             <InspectorField label="Min Rows">
               <InspectorNumberInput
                 min={1}
-                value={selectedLayoutItem.minH || 1}
+                value={selectedLayoutItem.minH || defaultMinSize.minH}
                 onChange={(value) => updateSelectedLayoutItem({ minH: value })}
               />
             </InspectorField>
@@ -172,10 +185,10 @@ export function WidgetInspectorPanel({
           value={selectedWidget}
           layoutItem={selectedLayoutItem}
           maxCols={showCardLayoutControls ? selectedCardControlMaxCols : 48}
-          autoOccupyRow={selectedWidgetAutoOccupyRow}
+          autoOccupyRow={selectedWidgetFollowParentWidth}
           onUpdateProps={updateSelectedWidgetProps}
           onUpdateLayout={updateSelectedLayoutItem}
-          onUpdateAutoOccupyRow={updateSelectedWidgetAutoOccupyRow}
+          onUpdateAutoOccupyRow={updateSelectedWidgetFollowParentWidth}
           renderBeforeSection={(section) => (
             shouldInsertSizingBeforeBorder && (section.id === 'frame' || section.title === 'Border')
               ? sizingInspectorSections

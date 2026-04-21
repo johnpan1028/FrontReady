@@ -33,6 +33,7 @@ type KitRootDropPreviewEventDetail =
       top: number;
       width: number;
       height: number;
+      layoutW?: number;
       widgetType: WidgetType;
       widgetId?: string;
       clientX?: number;
@@ -160,6 +161,23 @@ const resolveAnchoredFlowPosition = (
   };
 };
 
+const normalizeRootLayoutItem = (item: RootLayoutItem): RootLayoutItem => {
+  const minW = item.minW != null ? Math.max(1, Math.round(Number(item.minW) || 1)) : undefined;
+  const minH = item.minH != null ? Math.max(1, Math.round(Number(item.minH) || 1)) : undefined;
+  const width = Math.max(minW ?? 1, Math.round(Number(item.w) || 1));
+  const height = Math.max(minH ?? 1, Math.round(Number(item.h) || 1));
+
+  return {
+    ...item,
+    x: Math.round(Number(item.x) || 0),
+    y: Math.round(Number(item.y) || 0),
+    w: width,
+    h: height,
+    ...(minW != null ? { minW } : {}),
+    ...(minH != null ? { minH } : {}),
+  };
+};
+
 const MasterNodeBody = memo(function MasterNodeBody({
   widgetId,
   dragging,
@@ -277,16 +295,16 @@ const placeRootLayoutItemWithoutOverlap = (
   candidateWidget: RootWidgetMeta | undefined,
   ignoreId?: string,
 ) => {
-  let nextItem = { ...candidate };
+  let nextItem = normalizeRootLayoutItem(candidate);
   let guard = 0;
 
   while (guard < 200) {
     const collision = findRootLayoutCollision(nextItem, rootLayout, widgets, candidateWidget, ignoreId);
     if (!collision) return nextItem;
-    nextItem = {
+    nextItem = normalizeRootLayoutItem({
       ...nextItem,
       y: Math.ceil((collision.y + collision.height + ROOT_NODE_GAP) / ROOT_CONTROL_ROW_HEIGHT) * ROOT_CONTROL_ROW_HEIGHT,
-    };
+    });
     guard += 1;
   }
 
@@ -688,14 +706,23 @@ export function KitFactoryBoard({
             y: Math.round(detail.top - (hostRect?.top ?? 0)),
           };
       const candidateWidget = { type: detail.widgetType };
+      const layoutWidth = Number(detail.layoutW);
       const proposedItem = placeRootLayoutItemWithoutOverlap({
         i: detail.widgetId ?? '__kit_drag_preview__',
         x: Math.round(position.x),
         y: Math.round(position.y),
-        w: Math.max(1, detail.width / MASTER_CELL_WIDTH),
+        w: Number.isFinite(layoutWidth) && layoutWidth > 0
+          ? layoutWidth
+          : Math.max(1, detail.width / MASTER_CELL_WIDTH),
         h: Math.max(1, detail.height / ROOT_CONTROL_ROW_HEIGHT),
       }, rootLayout as RootLayoutItem[], kitStudioWidgets, candidateWidget, detail.widgetId);
-      const size = resolveMasterNodeSize(proposedItem, candidateWidget);
+      const resolvedSize = resolveMasterNodeSize(proposedItem, candidateWidget);
+      const previewWidth = Number(detail.width);
+      const previewHeight = Number(detail.height);
+      const size = {
+        width: Number.isFinite(previewWidth) && previewWidth > 0 ? previewWidth : resolvedSize.width,
+        height: Number.isFinite(previewHeight) && previewHeight > 0 ? previewHeight : resolvedSize.height,
+      };
 
       setDropPreviewNode({
         id: '__kit_drop_preview__',

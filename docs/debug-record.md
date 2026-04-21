@@ -2138,7 +2138,7 @@
 - 状态：`resolved`
 - 优先级：`medium`
 - 首次记录时间：`2026-04-20`
-- 最近更新时间：`2026-04-20`
+- 最近更新时间：`2026-04-21`
 - 来源：`Kit Studio` 实操反馈 / `src/components/KitFactoryBoard.tsx`
 
 #### 现象
@@ -2146,6 +2146,7 @@
 - 根画布上的控件在右侧栏修改 `Cols` 后，控件本体尺寸已更新
 - 但再次抓起该控件拖动时，根画布上的落点预览仍沿用旧宽度
 - 实际表现为拖动代理是新尺寸，`.kit-board-drop-preview` 和 `.react-flow__node-preview` 仍是旧尺寸
+- 后续继续暴露同类问题：控件进出 Card Shell 时，落点影子有时按目标布局列宽重算，而不是按当前拖拽本体像素尺寸显示
 
 #### 当前判断
 
@@ -2153,10 +2154,14 @@
 - 根因在于 `KitFactoryBoard` 的 `dragover` 预览回退逻辑
 - 现有根控件拖动时，自定义事件 `kit-root-drop-preview` 已带出正确 `width=224`
 - 但随后板面 `updateDropPreview` 在读不到 `dataTransfer` 的已拖动 widget 信息时，回退到 `draggedType` 默认尺寸，按 `Heading` 默认 `16 cols` 重新覆盖成 `448px`
+- 2026-04-21 补充判断：
+  - 根画布 drop preview 和跨卡 preview 应以当前拖拽本体的 DOM 像素尺寸为视觉真值
+  - 逻辑布局 `w/h` 只能用于最终落地和碰撞计算，不能反过来改变拖拽影子的视觉尺寸
 
 #### 相关文件
 
 - `src/components/KitFactoryBoard.tsx`
+- `src/components/NestedCanvas.tsx`
 - `scripts/verify-kit-studio-inspector.mjs`
 - `docs/debug-record.md`
 
@@ -2165,6 +2170,7 @@
 - Kit Studio 根画布控件的二次拖动反馈
 - 控件宽度调整后的拖拽可预判性
 - 后续所有依赖 `draggedType` 默认回退的根层预览逻辑
+- 控件在 `Card Shell ↔ 根画布`、`A 卡 ↔ B 卡` 之间转场时的影子尺寸一致性
 
 #### 当前处理决定
 
@@ -2185,6 +2191,10 @@
   - 初版曾增加活动拖拽代理检测 `ACTIVE_WIDGET_DRAG_PROXY_SELECTOR`
   - 最终改为根控件拖拽会话事件 `kit-root-drag-session`
   - 在根画布 `updateDropPreview` 中，若当前处于根控件拖拽会话，则不再回退到 `draggedType` 默认预览
+  - 2026-04-21 补充：根画布 preview 节点视觉宽高改为优先使用拖拽事件带出的当前本体像素宽高
+- `NestedCanvas.tsx`：
+  - 2026-04-21 补充：跨卡 preview 事件增加当前本体 `previewWidth / previewHeight`
+  - 跨卡落点影子优先使用本体像素尺寸，避免进入不同宽度卡壳时按目标列宽重算导致忽大忽小
 - `verify-kit-studio-inspector.mjs`：
   - 新增“拖入 Heading → 修改 `Cols=8` → 二次拖动”的固定浏览器回测
   - 校验 `.kit-board-drop-preview`、`.react-flow__node-preview`、拖动代理、本体拖动态四者宽度一致，且为 `224px`
@@ -2198,6 +2208,7 @@
 - 根因确认：真实问题不是宽度变更失败，而是已有控件拖动时，正确的自定义根预览被 `draggedType` 默认尺寸回退覆盖
 - 实际改动文件清单：
   - `src/components/KitFactoryBoard.tsx`
+  - `src/components/NestedCanvas.tsx`
   - `src/index.css`
   - `scripts/verify-kit-studio-inspector.mjs`
   - `docs/debug-record.md`
@@ -2217,6 +2228,7 @@
 - `2026-04-20`：将判定改为根控件拖拽会话事件 `kit-root-drag-session`，移除 `dragover` 内 DOM 扫描；浏览器复测确认普通二次拖动与改宽度后二次拖动两条链路的影子均恢复正常
 - `2026-04-20`：继续收到“没影子了”的人工反馈；浏览器截图确认 DOM 仍在，但落点影子视觉对比度偏低，于是增强 `.kit-board-drop-preview` 的边框、填充和阴影强度，并重启 `3002` 复测
 - `2026-04-20`：补充固定浏览器回测脚本并实测通过，输出 `temp/kit-studio-root-preview-width-verify.png`
+- `2026-04-21`：收到“控件进出卡片的影子大小不稳定，影子永远要跟本体一样大”的反馈；修正根画布 preview 与跨卡 preview 的视觉尺寸真值，统一优先使用拖拽本体像素宽高
 
 ---
 
@@ -2788,6 +2800,500 @@
 - `2026-04-21`：补齐默认值策略，要求控件默认跟随父级、Card Shell 默认开启内部跟随
 - `2026-04-21`：把内置模板实例化入口接入 `cloneDefaultWidgetProps(type)`，消除模板与新建控件的默认值分叉
 - `2026-04-21`：完成 3000 浏览器回测并留档截图
+
+---
+
+### 8. Kit Studio 控件父级跟随宽度与 Card Shell 最小宽度约束
+
+- 状态：`resolved`
+- 优先级：`high`
+- 首次记录时间：`2026-04-21`
+- 最近更新时间：`2026-04-21`
+- 来源：`src/components/NestedCanvas.tsx`
+
+#### 现象
+
+- 旧 `Auto occupy row` 勾选已迁到 `Size -> Cols` 的 `Follow parent`
+- 但在实际拖拽链路中仍存在两类不稳定：
+  - 控件在卡内勾选 `Follow parent` 后，跨卡迁移能适配新卡宽度，但再拖到底布时，宽度可能被重新算成小数
+  - Card Shell 的最小宽度需要始终包裹内部控件，而当前计算必须基于“卡内最终吸附后的布局”，否则会出现约束不稳定
+
+#### 当前判断
+
+- 问题集中在三条链路的宽度归一没有完全统一：
+  - `NestedCanvas` 的卡内布局归一 / 最小宽度推导
+  - 卡内控件拖出到底布时的 root layout 归一
+  - `WidgetWrapper` 的跨卡 fallback 迁移链路
+- root 底布不能被当作“父级宽度来源”，只能在迁出时保留当前尺寸值
+
+#### 相关文件
+
+- `src/components/NestedCanvas.tsx`
+- `src/components/KitFactoryBoard.tsx`
+- `src/builder/WidgetWrapper.tsx`
+- `src/pages/BuilderPage.tsx`
+
+#### 影响范围
+
+- 控件 `Follow parent` 的 Inspector 语义闭环
+- `A 卡 -> B 卡 -> 底布` 的尺寸一致性
+- Card Shell 永远包裹内部控件的宽度下限
+- 卡内“向上、向左吸附”后的稳定 gap / padding 体验
+
+#### 当前处理决定
+
+- 已完成修复
+- 保持最小化改动，不动已正确的拖拽/预览主链路
+- 只补齐宽度语义、最小宽度约束、fallback 迁移链路和 root 归一
+
+#### 重开条件
+
+- 修复后仍出现 `Follow parent` 控件拖到底布时宽度变成小数
+- 控件跨卡迁移没有自动适配目标卡宽度
+- Card Shell 仍能收窄到小于内部某一行控件总宽
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- 已实施：
+  - 用 compact 后布局而不是原始 layout 计算 `requiredPanelMinCols`
+  - root layout 放置前先归一整数宽高，并强制满足 `minW / minH`
+  - 补齐 `WidgetWrapper` fallback 迁移链路对 `followParentWidth` 的识别
+  - 将旧 `Auto occupy row` 的用户入口迁移到 `Size -> Cols -> Follow parent`
+  - 保留旧 `autoOccupyRow` 兼容读取，但新写入使用 `followParentWidth`
+
+#### 修复后回填项
+
+- 根因确认：
+  - `Follow parent` 语义已从旧 `autoOccupyRow` 迁移，但部分拖拽迁移链路仍只按布局宽度或 DOM 像素宽度计算
+  - 卡内控件迁出到底布时，如果没有统一做 root layout 归一，可能出现 `w < minW` 或小数宽高
+  - 跨卡 fallback 链路没有读取 `followParentWidth`，存在与主链路不一致的边界风险
+  - Card Shell 最小宽度如果基于原始布局而非 compact 后布局，会和最终向上、向左吸附结果脱节
+- 实际改动文件清单：
+  - `src/builder/widgetConfig.ts`
+  - `src/components/NestedCanvas.tsx`
+  - `src/components/KitFactoryBoard.tsx`
+  - `src/builder/WidgetWrapper.tsx`
+  - `src/components/builder-page/WidgetInspectorPanel.tsx`
+  - `src/pages/BuilderPage.tsx`
+  - `src/kit/contracts/control.ts`
+  - `src/kit/definitions/widgetDefinitions.ts`
+  - `src/kit/inspector/StudioDefinitionInspector.tsx`
+  - `docs/debug-record.md`
+- 验证方式 / 回归结果：
+  - `npm run lint -- --pretty false`：通过
+  - 重启 `3000` 开发服后，通过 Chrome 远程调试端口连接真实浏览器验证 `http://127.0.0.1:3000`
+  - 浏览器验证：右侧 Inspector 不再出现 `Auto occupy row`，`Size -> Cols` 行出现 `Follow parent`
+  - 浏览器验证：`Heading` 在 `Card A(w=12)` 勾选 `Follow parent` 后，卡内 layout 为 `x=0,w=12,minW=12`
+  - 浏览器验证：从 `Card A` 直接拖入 `Card B(w=18)` 后，自动适配为 `x=0,w=18,minW=18`
+  - 浏览器验证：再从 `Card B` 拖回底布后，parent 变为 `root`，但宽度保持 `w=18,minW=18`，没有被底布当作父级重新计算
+  - 截图留档：`temp/follow-parent-width-verify.png`
+
+#### 更新日志
+
+- `2026-04-21`：根据最新宽度规则要求，登记问题并开始修复
+- `2026-04-21`：第一次浏览器回测复现迁出到底布仍按像素宽度重算；确认需要重启 Vite 清掉旧模块缓存
+- `2026-04-21`：重启 `3000` 后完成真实浏览器回测，确认 `Follow parent`、跨卡适配、迁出到底布宽度保持和整数归一均通过
+
+---
+
+### 9. Kit Studio 最小 Cols / Rows 独立约束与默认值归一
+
+- 状态：`resolved`
+- 优先级：`high`
+- 首次记录时间：`2026-04-21`
+- 最近更新时间：`2026-04-21`
+- 来源：`src/store/builderStore.ts`
+
+#### 现象
+
+- 控件和卡壳的 `Min Cols / Min Rows` 不能再跟随其他尺寸数字联动变化，否则会引发拖拽、缩放和布局约束异常
+- 当前版本需要统一默认值：
+  - Card Shell：`4 x 2`
+  - Control：`2 x 1`
+- 这两个最小值通常只作为底层边界，不应被普通尺寸改动、父级跟随、自动撑开、自动增高等逻辑重写
+
+#### 当前判断
+
+- 问题本质是“默认最小值”和“运行时尺寸”在部分链路里没有彻底解耦
+- `minW / minH` 应该是独立约束；`w / h` 才是跟随拖拽、缩放、自动包裹、自动高度变化的运行值
+- 另外 `3000` 开发服曾缓存旧模块，导致第一次浏览器回测看到的仍是旧逻辑
+- 补充确认：左侧 `CARDS -> Card Shell` 走的是内置模板 `card_shell_base`，模板自身仍写死 `minW=12,minH=8`
+
+#### 相关文件
+
+- `src/builder/widgetConfig.ts`
+- `src/store/builderStore.ts`
+- `src/components/NestedCanvas.tsx`
+- `src/builder/WidgetWrapper.tsx`
+- `src/pages/BuilderPage.tsx`
+- `src/components/builder-page/WidgetInspectorPanel.tsx`
+- `src/kit/definitions/widgetDefinitions.ts`
+- `src/builder/assetLibrary.ts`
+
+#### 影响范围
+
+- 新建 Card Shell / Control 时的默认最小尺寸
+- 右侧 Inspector 的 `Min Cols / Min Rows` 显示与编辑语义
+- 控件与卡壳在缩放、自动撑开、自动增高后的稳定边界
+- 后续拖拽与布局规则的整数约束稳定性
+
+#### 当前处理决定
+
+- 已完成修复并完成浏览器回测
+- 保持最小化改动，只处理最小尺寸默认值与独立约束，不顺手扩展其他布局行为
+
+#### 重开条件
+
+- Card Shell 新建后最小值不是 `4 x 2`
+- Control 新建后最小值不是 `2 x 1`
+- 修改 `Cols / Rows` 或触发自动布局后，`Min Cols / Min Rows` 被同步改写
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- 已实施：
+  - 在 `widgetConfig` 中集中定义按类型分流的默认最小尺寸
+  - `addWidget` / `addTemplateNode` 在缺省 `minW / minH` 时自动补齐默认值
+  - 移除 `Follow parent`、Card Shell 自动撑宽、非滚动自动增高等链路对 `minW / minH` 的自动写回
+  - Inspector 的 `Min Cols / Min Rows` 改为按组件类型回退到默认最小值
+  - 将内置 `card_shell_base` 模板的 `minW / minH` 从 `12 / 8` 改为 `4 / 2`
+
+#### 修复后回填项
+
+- 根因确认：
+  - 旧逻辑里部分尺寸链路会把运行态 `w / h` 反写进 `minW / minH`
+  - 组件新建入口与模板实例化入口对最小值默认策略不统一
+  - 左侧 `Card Shell` 实际属于内置模板入口，模板数据中显式 `minW=12,minH=8` 会覆盖默认最小值
+  - 第一次浏览器验证命中的是 `3000` 端口的旧 Vite 模块缓存，造成误判
+- 实际改动文件清单：
+  - `src/builder/widgetConfig.ts`
+  - `src/store/builderStore.ts`
+  - `src/components/NestedCanvas.tsx`
+  - `src/builder/WidgetWrapper.tsx`
+  - `src/pages/BuilderPage.tsx`
+  - `src/components/builder-page/WidgetInspectorPanel.tsx`
+  - `src/kit/definitions/widgetDefinitions.ts`
+  - `src/builder/assetLibrary.ts`
+  - `docs/debug-record.md`
+- 验证方式 / 回归结果：
+  - `npm run lint -- --pretty false`：通过
+  - 重启 `3000` 端口 Vite 后，使用 Chrome 远程调试连接真实浏览器页面验证
+  - 浏览器验证：新建 `panel` 后，layout 为 `minW=4,minH=2`
+  - 浏览器验证：新建 `heading` 后，layout 为 `minW=2,minH=1`
+  - 浏览器验证：把 Card Shell 从 `12x8` 改到 `18x10` 后，`Min Cols / Min Rows` 仍保持 `4 / 2`
+  - 浏览器验证：把 Control 从 `6x3` 改到 `8x4` 后，`Min Cols / Min Rows` 仍保持 `2 / 1`
+  - 浏览器验证：右侧 Inspector 同步显示 `panel=4/2`、`control=2/1`
+  - 浏览器验证：从内置 `card_shell_base` 模板实例化的 Card Shell，layout 与 Inspector 均显示 `Min Cols=4, Min Rows=2`
+
+#### 更新日志
+
+- `2026-04-21`：根据“最小值独立、不随其他数字变化”的新要求开始收口默认策略
+- `2026-04-21`：完成默认值中心化与最小值独立约束改造
+- `2026-04-21`：第一次浏览器回测发现命中旧 dev 模块；重启 `3000` 后复测通过
+- `2026-04-21`：补修左侧 `Card Shell` 内置模板仍写死 `12x8` 的漏网点，重启 `3000` 后复测通过
+
+---
+
+### 10. Kit Studio 非父级跟随控件入卡后被卡壳裁剪
+
+- 状态：`resolved`
+- 优先级：`high`
+- 首次记录时间：`2026-04-21`
+- 最近更新时间：`2026-04-21`
+- 来源：`src/components/NestedCanvas.tsx`
+
+#### 现象
+
+- 控件没有勾选 `Follow parent` 时，拖入较小 Card Shell 后仍会被父级宽度约束
+- 预期是控件保持自身 `w`，由 Card Shell 反向撑开并继续保持左右 padding
+- 勾选 `Follow parent` 的控件才应服从卡壳宽度并独占一行
+- 后续真实操作继续暴露一条回归：未勾选 `Follow parent` 的控件在 `Card Shell ↔ 根画布` 之间反复往返后，会一轮一轮变窄
+
+#### 当前判断
+
+- 问题来自多条链路提前把子控件 `w` 裁剪到父级 cols：
+  - Nested canvas 入卡 / 跨卡 / native drop 的 width 计算
+  - compact layout 归一阶段
+  - Kit store 对非 root 子布局的统一 parent cols clamp
+  - WidgetWrapper fallback drop 入口
+- 往返缩水回归来自卡内迁出到底布的宽度真值选择错误：
+  - DOM 像素宽度会把卡内列宽重新采样成更小的底布列数
+  - `react-grid-layout` 的 `oldItem/newItem` 在跨域拖出时也可能已被临时压小
+  - 但后续回归再确认：compact card 的 `w` 也不是根层 `w` 的同单位，直接把卡内 `sourceLayoutItem.w` 写回 root 一样会漂移
+  - 正确做法是：回根层时按当前拖拽控件本体的真实像素宽高，结合当前 React Flow viewport scale 反算回 root cols/rows
+- 卡壳缩小时被异常顶宽的根因补充：
+  - Card Shell 自动反向撑宽原先按子控件当前首选 `w` 计算最小卡壳宽度
+  - 正确边界应按每一行控件的 `minW` 总和计算，而不是按当前首选宽度计算
+  - 否则一个未跟随父级的 `Heading(w=16,minW=2)` 会把卡壳锁回接近初始宽度，导致手动收窄后立刻弹开
+- Card Shell 拉伸预览期的根因补充：
+  - root 层拉伸时会先临时写 wrapper / preview host 的像素宽度，但 store 中 parent cols 还没落地
+  - `NestedCanvas` 若继续使用旧 parent cols + 新 DOM 宽度计算列宽，就会导致未跟随父级控件在 mid-resize 阶段被临时放大
+  - 正确做法是：预览期用 `kit-root-resize-preview` 事件中的目标 cols 参与卡内 grid 计算，直到 pointer up 正式落地
+- 正确模型应是：
+  - `followParentWidth=true`：子控件写成父级内容宽
+  - `followParentWidth=false`：子控件保留自身宽度，父级 Card Shell 根据内部 row span 自动扩宽
+  - Card Shell 手动收窄时，最小宽度应受“当前同一行全部非跟随控件的实际 row span”约束，而不是按 `minW` 总和约束
+  - `padding / gap` 是 Card Shell 内部渲染语义，不能再折算成额外的根层列数，否则右侧 padding 会被空列放大
+  - `followParentWidth=true` 的控件只服从卡壳，不反向锁死卡壳宽度
+
+#### 相关文件
+
+- `src/components/NestedCanvas.tsx`
+- `src/store/builderStore.ts`
+- `src/builder/WidgetWrapper.tsx`
+- `src/components/KitFactoryBoard.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 左侧控件拖入 Card Shell
+- 底布控件拖入 Card Shell
+- A 卡控件跨入 B 卡
+- 卡内控件拖到底布后再回卡的往返稳定性
+- 未跟随父级控件与跟随父级控件的宽度语义区分
+
+#### 当前处理决定
+
+- 已完成修复
+- 保持最小化改动，只取消非跟随控件的父级宽度裁剪，不改已有删除、选择、边框、最小值等链路
+
+#### 重开条件
+
+- 未勾选 `Follow parent` 的控件入卡后 `w` 被压成卡壳宽度
+- 已勾选 `Follow parent` 的控件不再服从卡壳宽度
+- Card Shell 被内部控件撑开时写大了 `minW`
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- 已实施：
+  - Kit nested child layout 在 store 层保留原始 `w`，不再统一按 parent cols 裁剪
+  - Nested canvas 对非跟随控件保留自身宽度；只有 follow parent 时才写入父级内容宽
+  - 用非跟随控件的实际内部 row span 参与 Card Shell 自动撑宽
+  - WidgetWrapper fallback drop 保留非跟随控件源宽度
+  - 卡内控件迁出到底布时，root `w/h` 改为按真实拖拽控件本体的像素宽高反算，并扣除当前 React Flow viewport scale
+  - 根画布拖拽预览同步增加 `layoutW`，确保预览与最终落地宽度保持同一口径
+  - `NestedCanvas` 监听 `kit-root-resize-preview`，当当前 Card Shell 正在 root 层拉伸预览时，临时使用预览 cols 参与卡内 grid 计算
+  - Card Shell 手动缩放时，缩放柄运行期的最小宽度改为按“当前非跟随控件实际 row span 的包裹宽度”动态限制；同一行多控件时，拉宽不带动控件变宽，收缩停在刚好包裹的位置
+  - Card Shell 自动撑宽与手动收缩下限不再把 `padding / gap` 二次折算成额外列数，避免右侧出现多余空列
+
+#### 修复后回填项
+
+- 根因确认：
+  - 原先为了避免子控件溢出，多个入口都使用 `Math.min(parentCols, childW)`
+  - 这会在 Card Shell 有机会自动撑开之前，先把子控件自身宽度丢失
+  - Store 层的父级 clamp 会进一步把已保留的宽度再次裁回父级宽度
+  - 后续回归进一步确认：卡内控件迁出到底布时，若按 DOM 像素宽度或 `react-grid-layout` 的临时拖拽 item 回写 root `w`，会让未跟随父级控件每往返一次就少一列
+  - 最新回归再确认：compact card 内部列宽与根画布 `28px/col` 不是同一单位；若把卡内 `w` 直接写回 root `w`，就会出现 `root 8 -> panel 9 -> root 9 -> panel 10` 这种逐轮加宽
+  - 最新回归确认：Card Shell 最小宽度约束不能按 `minW` 行总和算；用户当前语义要求是“按非跟随控件当前实际 row span 包裹”，否则会出现同一行多控件被压换行或卡壳收缩压穿
+  - 这意味着需要拆开两种宽度语义：自动撑宽看“实际非跟随内容包裹宽度”，跟随父级控件只参与服从父级，不参与反向锁宽
+  - 右侧 padding 回归确认：此前把 `padding / gap` 按像素再换算成根层列数，导致 `Heading(w=18)` 自动撑开后 Card Shell 被扩到 `w=21`，子控件右侧出现约 `98px` 空列；正确结果应是卡壳 `w=18`，左右 padding 均约 `17px`
+- 实际改动文件清单：
+  - `src/components/NestedCanvas.tsx`
+  - `src/store/builderStore.ts`
+  - `src/builder/WidgetWrapper.tsx`
+  - `src/components/KitFactoryBoard.tsx`
+  - `docs/debug-record.md`
+- 验证方式 / 回归结果：
+  - `npm run lint -- --pretty false`：通过
+  - 重启 `3000` 端口 Vite 后，使用 Chrome 远程调试连接真实浏览器页面验证
+  - 浏览器验证：`followParentWidth=false` 的 `heading(w=16)` 入 `panel(w=8)` 后，控件保持 `w=16`，Card Shell 自动扩为内容 row span，`minW` 仍为 `4`
+  - 浏览器验证：`followParentWidth=true` 的 `heading(w=16)` 入 `panel(w=10)` 后，控件变为 `w=10`，Card Shell 保持 `w=10`
+  - 浏览器验证：未勾选 `Follow parent` 的 `Heading` 完成 `Card Shell → 根画布 → Card Shell` 三次往返后，根画布宽度稳定保持 `448px`，回卡宽度稳定保持 `416px`，不再出现逐轮递减
+  - 浏览器验证：未勾选 `Follow parent` 的 `Button` 完成 `root 8 -> panel 9 -> root 8 -> panel 9` 往返后，不再出现 `8 -> 9 -> 10` 逐轮递增
+  - 浏览器验证：未勾选 `Follow parent` 的 `Heading` 回卡后手动收缩 Card Shell，卡壳可从 `504px` 收到 `280px`，不再弹回 `504px`
+  - 浏览器验证：未勾选 `Follow parent` 的 `Button` 在 Card Shell 拉宽预览中，宽度从 `199px` 只到 `202px`，不再临时跳到 `284px`
+  - 浏览器验证：已勾选 `Follow parent` 的 `Button` 在 Card Shell 拉宽预览中，宽度从 `414px` 实时变到 `584px`，pointer up 后稳定为 `582px`
+  - 浏览器验证：非跟随 `Heading(w=6)` 位于 `Card Shell(w=14)` 内时，卡壳保持 `w=14`
+  - 浏览器验证：非跟随 `Heading(w=18)` 位于 `Card Shell(w=10)` 内时，卡壳自动扩为 `w=18`
+  - 浏览器验证：非跟随 `Heading(w=18)` 自动撑开后，左右 padding 量测均约 `17px`，不再出现右侧 `98px` 空列
+  - 浏览器验证：跟随父级 `Heading` 在卡壳从 `w=12` 拉到 `w=18` 时，子控件同步从 `w=12` 跟到 `w=18`
+  - 浏览器验证：同一行两个非跟随 `Button(w=5 + 5)` 位于 `Card Shell(w=14)` 内时，卡壳拉宽到 `w=22` 过程中按钮宽度仅保持轻微像素级浮动；再强制收缩时停在 `w=10` 的包裹边界，不再压穿到 `w=4`
+  - 截图留档：`temp/repeat-shrink-verify.png`
+  - 截图留档：`/tmp/frontai-width-verify.png`
+
+#### 更新日志
+
+- `2026-04-21`：按“非跟随控件撑开卡壳、跟随控件服从卡壳”重新梳理链路
+- `2026-04-21`：修复 store、nested canvas、fallback drop 三处宽度裁剪
+- `2026-04-21`：重启 `3000` 后完成真实浏览器回测并确认通过
+- `2026-04-21`：继续收到“未跟随父级控件在卡和底布之间往返会越来越小”的反馈；首次回测命中旧 Vite 进程，确认 `3000` 仍在吐旧模块
+- `2026-04-21`：重启 `3000` 后定位并补修：卡内迁出到底布时改为读取 store 源布局宽度，根画布预览同步跟随 `layoutW`
+- `2026-04-21`：真实浏览器复测三次 `卡内 → 底布 → 卡内` 往返，宽度保持稳定，回归关闭
+- `2026-04-21`：收到“收缩卡壳后被顶很大”的反馈；将 Card Shell 最小宽度边界从控件当前 `w` 改为行内 `minW` 总和，重启 `3000` 后浏览器复测通过
+- `2026-04-21`：再次收到“控件反复进出 A 卡 / B 卡会每轮变宽 1 格”的反馈；浏览器脚本复现链路为 `root 8 -> panel 9 -> root 9 -> panel 10`
+- `2026-04-21`：定位到卡内迁出到底布时，`NestedCanvas` 仍把卡内列数直接当成根画布列数写回；对 compact card 来说，卡内 `w` 与根层 `w` 不是同一单位
+- `2026-04-21`：补修为按真实拖拽控件本体的像素宽高回写根层列数 / 行数，并按当前 React Flow viewport scale 反算；重启 `3000` 后浏览器复测 `root 8 -> panel 9 -> root 8 -> panel 9`，不再继续递增
+- `2026-04-21`：收到“未开启跟随父级时，卡壳拉伸过程中控件也会跟着动”的反馈；浏览器脚本复现 mid-resize 非跟随控件 `199px -> 284px -> 201px`
+- `2026-04-21`：定位到预览期只更新了 DOM 像素宽度，`NestedCanvas` 仍用旧 parent cols 算列宽；修复为监听 root resize preview cols，浏览器复测非跟随控件不再临时放大，同时跟随父级控件仍实时拉伸
+- `2026-04-21`：用户重新明确卡壳宽度语义：非跟随控件按当前实际宽度反向撑开；跟随父级控件只服从卡壳；同一行多非跟随控件收缩时必须停在包裹边界
+- `2026-04-21`：据此把 Card Shell 自动撑宽与缩放下限统一切到“非跟随控件实际 row span 包裹宽度”口径，并补上 root 缩放柄运行期的动态最小宽度
+- `2026-04-21`：重启固定 `3000` 端口并在同一 Chrome 窗口真实回测 4 条规则：小于卡壳不撑开、大于卡壳自动撑开、跟随父级实时跟随、多控件同一行收缩停在 `w=11` 包裹边界，全部通过
+- `2026-04-21`：收到“右侧 padding 不对”的反馈；定位到 `padding / gap` 被二次折算成额外列数，导致 Card Shell 右侧出现空列；改为自动撑宽和缩放下限只返回内部 row span，本轮浏览器复测右侧 padding 约 `17px`、多控件收缩边界为 `w=10`
+
+---
+
+### 30. 根画布控件拖入 Card Shell 时仍出现错误的大占位框
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-21`
+- 最近更新时间：`2026-04-21`
+- 来源：`src/builder/WidgetWrapper.tsx` / `src/components/NestedCanvas.tsx`
+
+#### 现象
+
+- 根画布控件从底板抓起后，拖入 Card Shell 时，真实拖拽代理尺寸是正确的
+- 但卡内还会额外出现一个错误的 `react-grid-placeholder`
+- 实测例子：
+  - 根控件本体 / 拖拽代理：`224 x 54`
+  - 卡内默认占位框：`407 x 48`
+- 这会让用户看到“双重影子”，且卡内那一层明显比本体大
+
+#### 当前判断
+
+- 问题只出现在 `root -> card` 的 HTML5 拖拽入口
+- 已确认其他三条链路仍正常：
+  - `card -> root`：根画布预览与拖拽代理一致
+  - `A card -> B card`：跨卡预览与本体一致
+  - Card Shell 收缩：不再被内部控件异常顶宽
+- 当前未打通的点是：根控件拖入 Card Shell 时，`react-grid-layout` 仍在目标卡内生成一层默认 placeholder，且其尺寸口径与根控件真实像素尺寸不一致
+- 已尝试的几条 JS 分支没有稳定接管这层默认 placeholder，因此先保留回归记录，避免继续在正确链路上扩大副作用
+
+#### 相关文件
+
+- `src/builder/WidgetWrapper.tsx`
+- `src/components/NestedCanvas.tsx`
+- `src/index.css`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- `root -> card` 拖拽体验
+- 根控件进入 Card Shell 时的影子观感一致性
+- 用户对最终落点的预判
+
+#### 当前处理决定
+
+- 已完成修复并回归
+- 保持最小化改动：只收口 `root -> card` 预览所有权与 placeholder 可见性，不改已通过的 `card -> root`、`A -> B` 和 Card Shell 缩放逻辑
+
+#### 重开条件
+
+- 用户继续反馈根控件拖入 Card Shell 时仍看到比本体更大的卡内占位框
+- 或后续要把 `root -> card` 也升级成与 `A -> B` 一样的卡内像素预览层
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- 已实施：
+  - `WidgetWrapper` 不再让根画布控件在 `root -> card` 过程中发起跨卡 preview 接管，避免和 `NestedCanvas` 的 root 入口逻辑互相打架
+  - `NestedCanvas` 继续允许 `react-grid-layout` 计算落点，但把默认 placeholder 作为内部占位计算使用，不再对用户可见
+  - `index.css` 的 placeholder 隐藏规则改为排除 `.kit-cross-card-drop-preview`，避免顺带把 `A -> B` 正常的卡内预览也一起藏掉
+
+#### 修复后回填项
+
+- 根因确认：
+  - `root -> card` 这条链路本身仍会由 `react-grid-layout` 生成默认 placeholder 做占位计算
+  - 之前根控件拖拽同时还在 `WidgetWrapper` 发跨卡 preview 事件，和卡内 root 入口的预览接管互相竞争，导致同一时刻可能出现“错误大占位框 / 双影子 / 旧预览残留”
+  - 同时全局 placeholder 隐藏样式没有排除 `.kit-cross-card-drop-preview`，会影响 `A -> B` 的正常卡内预览
+- 实际改动文件清单：
+  - `src/builder/WidgetWrapper.tsx`
+  - `src/index.css`
+  - `docs/debug-record.md`
+- 验证方式 / 回归结果：
+  - `npm run lint -- --pretty false`：通过
+  - Playwright 真浏览器回测 `root -> card`：
+    - 拖拽代理：`224 x 54`
+    - 卡内默认 placeholder：`227 x 52`
+    - 但已是 `opacity=0 / visibility=hidden`，用户侧不再看到错误大影子
+    - drop 后 parent 正确落为 `panel_test`
+  - Playwright 真浏览器回测 `card -> root`：
+    - 根画布 preview 与拖拽代理宽度一致：`200 -> 200`
+    - drop 后 parent 正确回到 `root`
+  - Playwright 真浏览器回测 `A -> B`：
+    - 目标卡 `.kit-cross-card-drop-preview` 仍可见，`opacity=1 / visibility=visible`
+    - drop 后 parent 正确落为 `panel_b`
+- 是否需要后续追加清理：
+  - 当前不需要；若后续要把 `root -> card` 也升级为卡内像素预览，再单开增强项，不在本次 bug 修复里继续扩大改动
+
+#### 更新日志
+
+- `2026-04-21`：浏览器复测确认 `card -> root`、`A -> B`、Card Shell 收缩三条链路仍通过
+- `2026-04-21`：新增根控件 `root -> card` 回测，抓到错误占位尺寸：本体 / 代理 `224 x 54`，卡内默认占位 `407 x 48`
+- `2026-04-21`：已尝试通过根拖拽会话、目标卡原生 `dragover` 和跨卡预览事件复用接管该入口，但暂未稳定覆盖 `react-grid-layout` 默认占位，先记录并留待下一轮单独处理
+- `2026-04-21`：重新核对 3000 开发服后发现此前一度命中旧 Vite 模块；重启同端口并用浏览器脚本确认真实模块状态
+- `2026-04-21`：收口根控件 `root -> card` 的 preview 所有权，移除根拖拽对跨卡 preview 的抢占；同时让 placeholder 隐藏规则排除 `.kit-cross-card-drop-preview`
+- `2026-04-21`：Playwright 回归确认 `root -> card` 错误大占位框已不再可见，`card -> root` 与 `A -> B` 两条链路保持正常，记录结案
+
+---
+
+### 31. Card Shell 缩放实时体验不够丝滑
+
+- 状态：`deferred`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-21`
+- 最近更新时间：`2026-04-21`
+- 来源：`src/builder/WidgetWrapper.tsx` / `src/components/NestedCanvas.tsx`
+
+#### 现象
+
+- Card Shell 宽度缩放功能已经完整可用，但实时拖拉体验还不够丝滑稳定
+- 未开启 `Follow parent` 的内部控件在卡壳缩放过程中可能反复抖动
+- 开启 `Follow parent` 的控件在缩放过程中，右侧 padding 不是全程实时稳定贴合，pointer up 后才更稳定
+
+#### 当前判断
+
+- 当前实现已经满足可用版本，需要先保存版本再做专项优化
+- 抖动更像是“预览期 DOM 像素宽度、root cols、nested grid cols、ResizeObserver 重新测量”之间的高频反馈循环
+- 跟随父级控件右侧 padding 不稳定，可能来自预览期 `rootResizePreviewCols` 与实际 wrapper 像素宽度有一帧不同步
+- 下一步不应再顺手改拖拽迁移、落点 preview、删除、Inspector 等已验证链路
+
+#### 相关文件
+
+- `src/builder/WidgetWrapper.tsx`
+- `src/components/NestedCanvas.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- Card Shell 手动缩放的实时视觉体验
+- 非跟随控件在缩放过程中的位置稳定性
+- 跟随父级控件的实时右侧 padding 稳定性
+
+#### 当前处理决定
+
+- 当前先保存可用版本
+- 后续作为专项优化进入，不在保存版本前继续扩大修改
+
+#### 重开条件
+
+- 开始优化 Card Shell 缩放丝滑度
+- 复现未跟随控件缩放过程中抖动
+- 复现跟随父级控件右侧 padding 在拖拽中实时不稳定
+
+#### 维修方案
+
+- 当前状态：`待后续确定`
+- 初步优化方向：
+  - 缩放预览期建立单一尺寸真值，避免 DOM width 与 grid cols 互相追逐
+  - 对 root resize preview 做 requestAnimationFrame 节流和最后一帧合并
+  - 非跟随控件在缩放过程中固定使用拖拽开始时的 child layout，不在每一帧重新 compact
+  - 跟随父级控件的宽度计算改为直接使用同一帧的 preview cols 和 preview canvas width，保证右侧 padding 同步
+  - pointer up 后再做一次最终 normalize / compact / store commit
+
+#### 修复后回填项
+
+- 根因确认
+- 实际改动文件清单
+- 浏览器验证方式 / 回归结果
+- 是否影响已有 `root ↔ card`、`A ↔ B`、右侧 padding、缩放下限链路
+
+#### 更新日志
+
+- `2026-04-21`：用户反馈完整实现已可用，但 Card Shell 缩放体验仍存在非跟随控件抖动、跟随控件右侧 padding 实时不稳定；先登记并准备保存当前可用版本
+
 ---
 
 ## 后续新增记录模板

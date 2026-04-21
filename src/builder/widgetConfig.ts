@@ -25,8 +25,13 @@ export type WidgetSize = {
   h: number;
 };
 
+export type WidgetMinSize = {
+  minW: number;
+  minH: number;
+};
+
 const DEFAULT_CONTROL_LAYOUT_PROPS = {
-  autoOccupyRow: false,
+  followParentWidth: false,
   fontFamily: 'parent',
 };
 
@@ -145,6 +150,26 @@ export const DEFAULT_WIDGET_SIZES: Record<WidgetType, WidgetSize> = {
   canvas: { w: 12, h: 8 },
 };
 
+export const DEFAULT_WIDGET_MIN_SIZES: Record<WidgetType, WidgetMinSize> = {
+  heading: { minW: 2, minH: 1 },
+  text: { minW: 2, minH: 1 },
+  stat: { minW: 2, minH: 1 },
+  chart: { minW: 2, minH: 1 },
+  calendar: { minW: 2, minH: 1 },
+  shadcn_login_card: { minW: 2, minH: 1 },
+  button: { minW: 2, minH: 1 },
+  icon_button: { minW: 2, minH: 1 },
+  divider: { minW: 2, minH: 1 },
+  text_input: { minW: 2, minH: 1 },
+  number_input: { minW: 2, minH: 1 },
+  textarea: { minW: 2, minH: 1 },
+  select: { minW: 2, minH: 1 },
+  checkbox: { minW: 2, minH: 1 },
+  radio: { minW: 2, minH: 1 },
+  panel: { minW: 4, minH: 2 },
+  canvas: { minW: 4, minH: 2 },
+};
+
 const CONTAINER_WIDGETS = new Set<WidgetType>(['panel', 'canvas']);
 
 export const isWidgetType = (value: unknown): value is WidgetType => {
@@ -159,11 +184,20 @@ export const cloneDefaultWidgetProps = (type: WidgetType) => {
   return JSON.parse(JSON.stringify(DEFAULT_WIDGET_PROPS[type] ?? {})) as Record<string, unknown>;
 };
 
+export const doesWidgetFollowParentWidth = (props?: Record<string, unknown>) => (
+  props?.followParentWidth === true || props?.autoOccupyRow === true
+);
+
+export const getDefaultWidgetMinSize = (type: WidgetType): WidgetMinSize => (
+  DEFAULT_WIDGET_MIN_SIZES[type] ?? { minW: 2, minH: 1 }
+);
+
 export const getDefaultWidgetSize = (type: WidgetType, maxCols?: number) => {
   const size = DEFAULT_WIDGET_SIZES[type] ?? { w: 4, h: 4 };
+  const minSize = getDefaultWidgetMinSize(type);
   if (!maxCols) return { ...size };
   return {
-    w: Math.min(size.w, maxCols),
+    w: Math.max(Math.min(size.w, maxCols), Math.min(minSize.minW, maxCols)),
     h: size.h,
   };
 };
