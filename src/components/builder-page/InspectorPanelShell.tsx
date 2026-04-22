@@ -4,14 +4,12 @@ import { cn } from '../../utils/cn';
 
 export function InspectorPanelShell({
   title,
-  badge,
   quickMode,
   onOpenProject,
   onOpenTheme,
   children,
 }: {
   title: string;
-  badge: string;
   quickMode: 'project' | 'theme' | null;
   onOpenProject: () => void;
   onOpenTheme: () => void;
@@ -23,9 +21,6 @@ export function InspectorPanelShell({
         <div className="flex w-full items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-sm font-semibold text-hr-text">{title}</h2>
-            <span className="builder-inspector-chip">
-              {badge}
-            </span>
           </div>
           <div className="builder-inspector-segmented inline-flex shrink-0 items-center p-0.5">
             <button

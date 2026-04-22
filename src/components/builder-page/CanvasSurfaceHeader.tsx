@@ -5,8 +5,6 @@ import { SurfaceModeToggle, type EditSurfaceMode } from './SurfaceModeToggle';
 export function CanvasSurfaceHeader({
   mode,
   selectedPage,
-  pageNodeCount,
-  kitMasterCount,
   kitMasterOptions,
   selectedKitStudioId,
   onChangeMode,
@@ -17,8 +15,6 @@ export function CanvasSurfaceHeader({
 }: {
   mode: Exclude<EditSurfaceMode, 'pages'>;
   selectedPage: BuilderPageDocument | null;
-  pageNodeCount: number;
-  kitMasterCount: number;
   kitMasterOptions: Array<{ id: string; label: string }>;
   selectedKitStudioId: string | null;
   onChangeMode: (mode: EditSurfaceMode) => void;
@@ -28,12 +24,9 @@ export function CanvasSurfaceHeader({
   onRemoveSelectedWidget: () => void;
 }) {
   return (
-    <div className="shrink-0 flex min-h-[52px] items-center border-b border-hr-border bg-hr-panel/95 px-3 py-1.5 backdrop-blur-sm">
+    <div className="shrink-0 flex min-h-[42px] items-center border-b border-hr-border bg-hr-panel/95 px-3 py-[5px] backdrop-blur-sm">
       <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="inline-flex items-center rounded-full border border-hr-border bg-hr-bg px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-hr-muted">
-            {mode === 'kits' ? 'Master' : 'Editor'}
-          </span>
           <h3 className="truncate text-sm font-semibold text-hr-text">
             {mode === 'kits'
               ? 'Kit Studio · Reusable Masters'
@@ -46,12 +39,6 @@ export function CanvasSurfaceHeader({
         <div className="flex min-w-0 items-center justify-self-end gap-2">
           {mode === 'kits' ? (
             <>
-              <span className="inline-flex min-h-[26px] items-center rounded-full border border-hr-border bg-hr-bg px-2 text-[10px] text-hr-muted">
-                Master board
-              </span>
-              <span className="inline-flex min-h-[26px] items-center rounded-full border border-hr-border bg-hr-bg px-2 text-[10px] text-hr-muted">
-                {kitMasterCount} master{kitMasterCount === 1 ? '' : 's'}
-              </span>
               <select
                 name="kitStudioJumpTarget"
                 value={selectedKitStudioId ?? ''}
@@ -99,20 +86,7 @@ export function CanvasSurfaceHeader({
                 <Trash2 size={14} />
               </button>
             </>
-          ) : selectedPage ? (
-            <>
-              <span className="inline-flex min-h-[26px] items-center rounded-full border border-hr-border bg-hr-bg px-2 text-[10px] text-hr-muted">
-                {selectedPage.board.width} × {selectedPage.board.height}
-              </span>
-              <span className="inline-flex min-h-[26px] items-center rounded-full border border-hr-border bg-hr-bg px-2 text-[10px] text-hr-muted">
-                {pageNodeCount} nodes
-              </span>
-            </>
-          ) : (
-            <span className="inline-flex min-h-[26px] items-center rounded-full border border-hr-border bg-hr-bg px-2 text-[10px] text-hr-muted">
-              No page selected
-            </span>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

@@ -5,6 +5,11 @@ import { useAppStore } from './store/appStore';
 import { useBuilderStore } from './store/builderStore';
 import { applyShellThemeToDocument } from './theme/shellTheme';
 
+const isBenignResizeObserverMessage = (message: string) => (
+  message === 'ResizeObserver loop completed with undelivered notifications.'
+  || message === 'ResizeObserver loop limit exceeded'
+);
+
 export default function App() {
   const theme = useAppStore((state) => state.theme);
 
@@ -16,6 +21,8 @@ export default function App() {
     if (!import.meta.env.DEV || typeof window === 'undefined') return;
 
     const handleError = (event: ErrorEvent) => {
+      if (isBenignResizeObserverMessage(event.message)) return;
+
       (window as any).__builderLastError = {
         type: 'error',
         message: event.message,

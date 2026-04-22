@@ -8,6 +8,7 @@ import type {
   RequestConfig,
 } from '../schema/project';
 import { RequestConfigSchema } from '../schema/project';
+import { extractSlotShellLabel } from '../builder/slotShell';
 import {
   getNavigateActionConfig,
   getOpenModalActionConfig,
@@ -119,7 +120,7 @@ export type AiHandoffPackage = {
 };
 
 const getNodeLabel = (node: BuilderNodeDocument) => {
-  const candidates = [node.props.title, node.props.text, node.props.label, node.type];
+  const candidates = [node.props.title, extractSlotShellLabel(node.props.rows), node.props.labelText, node.props.text, node.props.label, node.type];
   const picked = candidates.find((value) => typeof value === 'string' && value.trim());
   return typeof picked === 'string' ? picked : node.type;
 };

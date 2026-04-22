@@ -2398,8 +2398,6 @@ export function PageBoard({
   const pagesById = useMemo(() => new Map(pages.map((page) => [page.id, page])), [pages]);
 
   const selectedPage = pages.find((page) => page.id === selectedPageId) ?? pages[0] ?? null;
-  const pageCount = pages.filter((page) => page.kind === 'page').length;
-  const overlayCount = pages.length - pageCount;
 
   useEffect(() => {
     if (!feedback) return undefined;
@@ -2847,8 +2845,6 @@ export function PageBoard({
     return null;
   }, [feedback]);
 
-  const boardCountsLabel = `${pageCount}P · ${overlayCount}O · ${links.length}L`;
-
   useEffect(() => {
     if (selectedLinkId && !links.some((link) => link.id === selectedLinkId)) {
       setSelectedLinkState(null);
@@ -3006,7 +3002,6 @@ export function PageBoard({
                 <Layers3 size={14} />
                 Pages Board
               </span>
-              <span className="page-board-toolbar-summary">{boardCountsLabel}</span>
             </div>
             {toolbarNotice ? (
               <div className={cn(

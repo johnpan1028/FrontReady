@@ -18,6 +18,7 @@ import {
   Settings2,
   Slash,
   Square,
+  Star,
   TextCursor,
   Type,
   UserRound,
@@ -31,11 +32,18 @@ export type BuilderAssetLayer = 'shell' | 'blueprint' | 'layout' | 'kit' | 'card
 export type BuilderAssetSurface = 'pages' | 'canvas' | 'kits';
 export type BuilderAssetSource = 'native' | 'shadcn' | 'react-day-picker' | 'recharts';
 export type BuilderAssetCategory =
+  | 'primitive'
+  | 'shell'
+  | 'composer'
   | 'topology'
   | 'starter'
   | 'layout'
   | 'editorial'
   | 'data'
+  | 'media'
+  | 'selection'
+  | 'setting'
+  | 'state'
   | 'content'
   | 'form'
   | 'foundation'
@@ -1085,22 +1093,32 @@ export const BUILDER_ASSET_SECTIONS: BuilderAssetSection[] = [
   {
     id: 'control',
     title: 'Controls',
-    description: 'Atoms that live inside cards.',
+    description: 'Composable shells that live inside cards.',
     assets: [
-      { id: 'asset-control-heading', kind: 'widget', layer: 'control', widgetType: 'heading', label: 'Heading', description: 'Section or card title.', icon: Heading, w: 16, h: 3, source: 'native', category: 'content', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-text', kind: 'widget', layer: 'control', widgetType: 'text', label: 'Paragraph', description: 'Text block or handoff note.', icon: Type, w: 16, h: 5, source: 'native', category: 'content', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-stat', kind: 'widget', layer: 'control', widgetType: 'stat', label: 'Stat', description: 'Metric display atom.', icon: Square, w: 12, h: 6, source: 'native', category: 'data', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-chart', kind: 'widget', layer: 'control', widgetType: 'chart', label: 'Chart Mount', description: 'Chart placeholder surface.', icon: BarChart2, w: 24, h: 12, source: 'recharts', category: 'data', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-button', kind: 'widget', layer: 'control', widgetType: 'button', label: 'Button', description: 'Action trigger.', icon: MousePointerClick, w: 8, h: 3, source: 'shadcn', category: 'form', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-icon-button', kind: 'widget', layer: 'control', widgetType: 'icon_button', label: 'Icon Button', description: 'Compact icon action.', icon: Settings2, w: 4, h: 3, source: 'shadcn', category: 'form', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-divider', kind: 'widget', layer: 'control', widgetType: 'divider', label: 'Divider', description: 'Visual separator.', icon: Slash, w: 12, h: 2, source: 'shadcn', category: 'foundation', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-text-input', kind: 'widget', layer: 'control', widgetType: 'text_input', label: 'Text Input', description: 'Single-line input.', icon: TextCursor, w: 12, h: 4, source: 'shadcn', category: 'form', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-number-input', kind: 'widget', layer: 'control', widgetType: 'number_input', label: 'Number Input', description: 'Numeric input.', icon: Circle, w: 12, h: 4, source: 'shadcn', category: 'form', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-textarea', kind: 'widget', layer: 'control', widgetType: 'textarea', label: 'Textarea', description: 'Multi-line input.', icon: AlignLeft, w: 16, h: 6, source: 'shadcn', category: 'form', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-select', kind: 'widget', layer: 'control', widgetType: 'select', label: 'Select', description: 'Dropdown input.', icon: ChevronDown, w: 12, h: 4, source: 'shadcn', category: 'form', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-checkbox', kind: 'widget', layer: 'control', widgetType: 'checkbox', label: 'Checkbox Group', description: 'Multi-choice input.', icon: CheckSquare, w: 12, h: 6, source: 'shadcn', category: 'form', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-radio', kind: 'widget', layer: 'control', widgetType: 'radio', label: 'Radio Group', description: 'Single-choice input.', icon: Circle, w: 12, h: 6, source: 'shadcn', category: 'form', surfaces: ['canvas', 'kits'] },
-      { id: 'asset-control-panel', kind: 'widget', layer: 'control', widgetType: 'panel', label: 'Blank Card Shell', description: 'Empty card shell container.', icon: PenLine, w: 16, h: 10, source: 'native', category: 'foundation', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-slot-shell', kind: 'widget', layer: 'control', widgetType: 'slot_shell', label: 'Slot Shell', description: 'Structure shell for building controls from slots and atoms.', icon: LayoutPanelTop, badge: 'Core', w: 1, h: 1, source: 'native', category: 'shell', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-heading', kind: 'widget', layer: 'control', widgetType: 'heading', label: 'Heading', description: 'Text primitive for titles and section anchors.', icon: Heading, badge: 'P0', w: 16, h: 3, source: 'native', category: 'primitive', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-text', kind: 'widget', layer: 'control', widgetType: 'text', label: 'Paragraph', description: 'Body copy primitive for notes and descriptions.', icon: Type, badge: 'P0', w: 16, h: 5, source: 'native', category: 'primitive', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-icon', kind: 'widget', layer: 'control', widgetType: 'icon', label: 'Icon', description: 'P0 icon primitive for shells and chrome.', icon: Star, badge: 'P0', w: 4, h: 3, source: 'native', category: 'primitive', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-image', kind: 'widget', layer: 'control', widgetType: 'image', label: 'Image', description: 'Media primitive for visual slots and thumbnails.', icon: Square, badge: 'P0', w: 12, h: 8, source: 'native', category: 'primitive', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-divider', kind: 'widget', layer: 'control', widgetType: 'divider', label: 'Divider', description: 'Line primitive for rhythm and separation.', icon: Slash, badge: 'P0', w: 12, h: 2, source: 'shadcn', category: 'primitive', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-badge', kind: 'widget', layer: 'control', widgetType: 'badge', label: 'Badge', description: 'Compact status shell.', icon: Circle, badge: 'P1', w: 5, h: 2, source: 'native', category: 'shell', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-checkbox-item', kind: 'widget', layer: 'control', widgetType: 'checkbox_item', label: 'Checkbox Item', description: 'Single option shell with checkbox + label.', icon: CheckSquare, badge: 'P1', w: 10, h: 3, source: 'native', category: 'shell', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-button', kind: 'widget', layer: 'control', widgetType: 'button', label: 'Inline Shell', description: 'Slot-based shell for icon, text, and badge actions.', icon: MousePointerClick, badge: 'P1', w: 8, h: 3, source: 'shadcn', category: 'shell', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-icon-button', kind: 'widget', layer: 'control', widgetType: 'icon_button', label: 'Icon Button', description: 'Icon-only shell action.', icon: Settings2, badge: 'P1', w: 4, h: 3, source: 'shadcn', category: 'shell', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-text-input', kind: 'widget', layer: 'control', widgetType: 'text_input', label: 'Text Input', description: 'Single-line input shell.', icon: TextCursor, badge: 'P1', w: 12, h: 4, source: 'shadcn', category: 'shell', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-number-input', kind: 'widget', layer: 'control', widgetType: 'number_input', label: 'Number Input', description: 'Numeric input shell.', icon: Circle, badge: 'P1', w: 12, h: 4, source: 'shadcn', category: 'shell', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-textarea', kind: 'widget', layer: 'control', widgetType: 'textarea', label: 'Textarea', description: 'Multi-line input shell.', icon: AlignLeft, badge: 'P1', w: 16, h: 6, source: 'shadcn', category: 'shell', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-select', kind: 'widget', layer: 'control', widgetType: 'select', label: 'Select', description: 'Dropdown shell.', icon: ChevronDown, badge: 'P1', w: 12, h: 4, source: 'shadcn', category: 'shell', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-checkbox', kind: 'widget', layer: 'control', widgetType: 'checkbox', label: 'Checkbox Group', description: 'Composed multi-choice input.', icon: CheckSquare, badge: 'P2', w: 12, h: 6, source: 'shadcn', category: 'composer', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-radio', kind: 'widget', layer: 'control', widgetType: 'radio', label: 'Radio Group', description: 'Composed single-choice input.', icon: Circle, badge: 'P2', w: 12, h: 6, source: 'shadcn', category: 'composer', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-stat', kind: 'widget', layer: 'control', widgetType: 'stat', label: 'Stat', description: 'Metric display composer.', icon: Square, badge: 'P2', w: 12, h: 6, source: 'native', category: 'composer', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-chart', kind: 'widget', layer: 'control', widgetType: 'chart', label: 'Chart Mount', description: 'Chart composition surface.', icon: BarChart2, badge: 'P2', w: 24, h: 12, source: 'recharts', category: 'composer', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-media-summary-card', kind: 'widget', layer: 'control', widgetType: 'media_summary_card', label: 'Media Summary', description: 'Thumbnail, title, description, and meta.', icon: PanelTop, badge: 'P2', w: 16, h: 10, source: 'native', category: 'composer', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-media-list-item', kind: 'widget', layer: 'control', widgetType: 'media_list_item', label: 'Media List Item', description: 'Horizontal media row.', icon: Rows3, badge: 'P2', w: 18, h: 5, source: 'native', category: 'composer', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-setting-row', kind: 'widget', layer: 'control', widgetType: 'setting_row', label: 'Setting Row', description: 'Setting label with trailing control.', icon: Settings2, badge: 'P2', w: 18, h: 5, source: 'native', category: 'composer', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-choice-chip-group', kind: 'widget', layer: 'control', widgetType: 'choice_chip_group', label: 'Choice Chips', description: 'Compact selectable option chips.', icon: Columns3, badge: 'P2', w: 16, h: 5, source: 'native', category: 'composer', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-empty-state-card', kind: 'widget', layer: 'control', widgetType: 'empty_state_card', label: 'Empty State', description: 'Empty-state copy and CTA block.', icon: Mail, badge: 'P2', w: 16, h: 10, source: 'native', category: 'composer', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-panel', kind: 'widget', layer: 'control', widgetType: 'panel', label: 'Blank Card Shell', description: 'Empty card shell container.', icon: PenLine, badge: 'P3', w: 16, h: 10, source: 'native', category: 'shell', surfaces: ['canvas', 'kits'] },
     ],
   },
 ];
@@ -1122,18 +1140,12 @@ const MINIMAL_SYSTEM_ASSET_IDS_BY_SURFACE: Partial<Record<BuilderAssetSurface, S
   canvas: new Set([
     'asset-card-shell-base',
     'asset-card-shadcn-login',
-    'asset-control-heading',
-    'asset-control-text',
-    'asset-control-text-input',
-    'asset-control-button',
+    'asset-control-slot-shell',
   ]),
   kits: new Set([
     'asset-card-shell-base',
     'asset-card-shadcn-login',
-    'asset-control-heading',
-    'asset-control-text',
-    'asset-control-text-input',
-    'asset-control-button',
+    'asset-control-slot-shell',
   ]),
 };
 

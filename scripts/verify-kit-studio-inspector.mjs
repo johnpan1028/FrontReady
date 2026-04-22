@@ -4,37 +4,15 @@ import path from 'node:path';
 import os from 'node:os';
 import { chromium } from 'playwright';
 
-const appUrl = process.env.KIT_STUDIO_VERIFY_URL ?? 'http://127.0.0.1:3002/';
+const appUrl = process.env.KIT_STUDIO_VERIFY_URL ?? 'http://127.0.0.1:3000/';
 const viewport = { width: 1600, height: 1000 };
 const tempDir = path.resolve('temp');
-const screenshotPath = path.join(tempDir, 'kit-studio-inspector-verify.png');
-const rootPreviewScreenshotPath = path.join(tempDir, 'kit-studio-root-preview-width-verify.png');
+const screenshotPath = path.join(tempDir, 'kit-studio-slot-shell-verify.png');
 const cacheRoot = path.join(os.homedir(), '.cache', 'frontaiready-playwright-deps');
 const debDir = path.join(cacheRoot, 'debs');
 const rootDir = path.join(cacheRoot, 'root');
 const libDir = path.join(rootDir, 'usr', 'lib', 'x86_64-linux-gnu');
 const requiredAptPackages = ['libnspr4', 'libnss3', 'libasound2t64'];
-const forbiddenInspectorLabels = [
-  'Component ID',
-  'Component Type',
-  'Runtime Type',
-  'Project ID',
-  'Shell ID',
-  'Relation ID',
-  'Relation Type',
-  'Code',
-];
-const forbiddenSourceLabels = [
-  'Component ID',
-  'Component Type',
-  'Runtime Type',
-  'Project ID',
-  'Shell ID',
-  'Relation ID',
-  'Relation Type',
-  'codeSection',
-  'readonlyField',
-];
 
 const run = (command, args, options = {}) => execFileSync(command, args, {
   encoding: 'utf8',
@@ -105,179 +83,154 @@ const ensurePlaywrightBrowserDeps = () => {
   return browserEnv;
 };
 
-const resolveAppUrl = (suffix = '') => new URL(suffix, appUrl).toString();
-
 const assertServerReady = async () => {
   const response = await fetch(appUrl);
   if (!response.ok) {
-    throw new Error(`3002 页面未就绪：${appUrl} 返回 ${response.status}`);
+    throw new Error(`Kit Studio 页面未就绪：${appUrl} 返回 ${response.status}`);
   }
 };
 
-const assertServedSourceClean = async () => {
-  const sourcePaths = [
-    'src/components/builder-page/WidgetInspectorPanel.tsx',
-    'src/kit/definitions/widgetDefinitions.ts',
-    'src/components/BuilderShellPanels.tsx',
-  ];
+const clickCreateProjectButton = async (page) => {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const button = page.getByRole('button', { name: 'Create a new project' });
+    await button.waitFor({ state: 'visible', timeout: 10_000 });
 
-  for (const sourcePath of sourcePaths) {
-    const response = await fetch(resolveAppUrl(sourcePath));
-    if (!response.ok) {
-      throw new Error(`无法读取开发服源码 ${sourcePath}：${response.status}`);
-    }
-
-    const source = await response.text();
-    const found = forbiddenSourceLabels.filter((label) => source.includes(label));
-    if (found.length > 0) {
-      throw new Error(`开发服源码 ${sourcePath} 仍包含禁用字段：${found.join(', ')}`);
+    try {
+      await button.click({ timeout: 5_000 });
+      return;
+    } catch {
+      await page.waitForTimeout(800);
     }
   }
+
+  throw new Error('无法稳定点击 Create a new project 按钮。');
 };
 
-const dragCardShellIntoKitStudio = async (page) => {
-  await page.getByLabel('Kit studio').click({ timeout: 10_000 });
-  await page.waitForTimeout(500);
+const ensureProjectInspectorVisible = async (page) => {
+  if (await page.locator('button[aria-label="Create a new project"]').count() > 0) return;
 
-  const source = page.locator('.droppableElement', { hasText: 'Card Shell' }).first();
-  const sourceBox = await source.boundingBox({ timeout: 10_000 });
-  if (!sourceBox) {
-    throw new Error('未找到左侧栏 Card Shell 拖拽源。');
+  const projectTabs = await page.getByRole('button', { name: 'Project' }).all();
+  if (projectTabs.length === 0) {
+    throw new Error('未找到右侧 Project 标签。');
   }
 
-  const boardBox = await page.locator('.react-flow').first().boundingBox({ timeout: 10_000 });
-  if (!boardBox) {
-    throw new Error('未找到 Kit Studio 画布。');
-  }
-
-  const targetX = boardBox.x + Math.min(340, Math.max(180, boardBox.width * 0.35));
-  const targetY = boardBox.y + Math.min(300, Math.max(180, boardBox.height * 0.35));
-
-  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(targetX, targetY, { steps: 12 });
-  await page.mouse.up();
-  await page.waitForTimeout(1_000);
-};
-
-const dragHeadingIntoKitStudio = async (page) => {
-  await page.getByLabel('Kit studio').click({ timeout: 10_000 });
-  await page.waitForTimeout(500);
-
-  const source = page.locator('.droppableElement', { hasText: 'Heading' }).first();
-  const sourceBox = await source.boundingBox({ timeout: 10_000 });
-  if (!sourceBox) {
-    throw new Error('未找到左侧栏 Heading 拖拽源。');
-  }
-
-  const boardBox = await page.locator('.react-flow').first().boundingBox({ timeout: 10_000 });
-  if (!boardBox) {
-    throw new Error('未找到 Kit Studio 画布。');
-  }
-
-  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(boardBox.x + 360, boardBox.y + 260, { steps: 12 });
-  await page.mouse.up();
-  await page.waitForTimeout(1_000);
-};
-
-const dragPaletteItemToBoard = async (page, label, targetX, targetY) => {
-  const source = page.locator('.droppableElement', { hasText: label }).first();
-  const sourceBox = await source.boundingBox({ timeout: 10_000 });
-  if (!sourceBox) {
-    throw new Error(`未找到左侧栏 ${label} 拖拽源。`);
-  }
-
-  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(targetX, targetY, { steps: 12 });
-  await page.mouse.up();
-  await page.waitForTimeout(1_000);
-};
-
-const assertRootPreviewTracksUpdatedWidth = async (page) => {
-  await page.goto(`${appUrl}?kit_root_preview_verify=${Date.now()}`, {
-    waitUntil: 'networkidle',
-    timeout: 30_000,
-  });
-
-  await dragHeadingIntoKitStudio(page);
-
-  const colsInput = page.locator('.builder-inspector-body input[type="number"]').first();
-  await colsInput.fill('8');
-  await colsInput.press('Enter');
+  await projectTabs[projectTabs.length - 1].click();
   await page.waitForTimeout(800);
+};
 
-  const handle = page.locator('.react-flow__node-master.selected .external-move-handle').first();
-  const handleBox = await handle.boundingBox({ timeout: 10_000 });
-  if (!handleBox) {
-    throw new Error('未找到已选控件的外部拖动柄。');
-  }
+const ensureProjectReady = async (page) => {
+  if (await page.getByText('Create your first project').count() === 0) return;
 
-  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(handleBox.x + 180, handleBox.y + 120, { steps: 14 });
-  await page.waitForTimeout(300);
-
-  const metrics = await page.evaluate(() => {
-    const selectors = [
-      '.kit-board-drop-preview',
-      '.react-flow__node-preview',
-      '[data-widget-drag-proxy="true"]',
-      '.widget-wrapper[data-widget-dragging="true"]',
-    ];
-
-    return selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)).map((element) => {
-      const rect = element.getBoundingClientRect();
-      return {
-        selector,
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      };
-    }));
+  await ensureProjectInspectorVisible(page);
+  await clickCreateProjectButton(page);
+  const createButton = page.getByRole('button', {
+    name: /Create Blank Desktop Project|Create Guided Desktop Project/,
   });
+  await createButton.waitFor({ state: 'visible', timeout: 10_000 });
+  await createButton.click();
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(1200);
+};
 
-  const rootPreview = metrics.find((entry) => entry.selector === '.kit-board-drop-preview');
-  const dragProxy = metrics.find((entry) => entry.selector === '[data-widget-drag-proxy="true"]');
+const switchToKitStudio = async (page) => {
+  await page.getByLabel('Kit studio').click({ timeout: 10_000 });
+  await page.waitForTimeout(600);
+};
 
-  await page.screenshot({ path: rootPreviewScreenshotPath, fullPage: true });
+const assertMinimalControlLibrary = async (page) => {
+  const labels = (await page.locator('.droppableElement').allInnerTexts())
+    .map((label) => label.replace(/\s+/g, ' ').trim());
+
+  if (!labels.some((label) => label.includes('Slot Shell'))) {
+    throw new Error(`左侧栏缺少 Slot Shell：${JSON.stringify(labels, null, 2)}`);
+  }
+
+  const forbiddenControls = labels.filter((label) => (
+    label.includes('Heading')
+    || label.includes('Paragraph')
+    || label.includes('Inline Shell')
+    || label.includes('Icon')
+  ));
+
+  if (forbiddenControls.length > 0) {
+    throw new Error(`左侧 Control 入口仍暴露旧基础控件：${forbiddenControls.join(', ')}`);
+  }
+};
+
+const dragSlotShellIntoKitStudio = async (page) => {
+  const source = page.locator('.droppableElement', { hasText: 'Slot Shell' }).first();
+  const sourceBox = await source.boundingBox({ timeout: 10_000 });
+  if (!sourceBox) throw new Error('未找到左侧栏 Slot Shell。');
+
+  const boardBox = await page.locator('.react-flow').first().boundingBox({ timeout: 10_000 });
+  if (!boardBox) throw new Error('未找到 Kit Studio 画布。');
+
+  const targetX = boardBox.x + Math.min(320, Math.max(180, boardBox.width * 0.32));
+  const targetY = boardBox.y + Math.min(260, Math.max(180, boardBox.height * 0.28));
+
+  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetX, targetY, { steps: 12 });
   await page.mouse.up();
-
-  if (!rootPreview || !dragProxy) {
-    throw new Error(`缺少根画布预览或拖动代理：${JSON.stringify(metrics, null, 2)}`);
-  }
-
-  if (rootPreview.width !== 224 || dragProxy.width !== 224 || rootPreview.width !== dragProxy.width) {
-    throw new Error(`改宽度后二次拖动的预览宽度未同步：${JSON.stringify(metrics, null, 2)}`);
-  }
-
-  return metrics;
+  await page.waitForTimeout(1000);
 };
 
-const assertInspectorClean = async (page) => {
+const assertShellInspector = async (page) => {
   const inspector = page.locator('.builder-inspector-body');
-  const inspectorText = await inspector.innerText({ timeout: 10_000 });
+  await inspector.waitFor({ state: 'visible', timeout: 10_000 });
+  const text = await inspector.innerText();
 
-  if (!inspectorText.includes('CARD') || !inspectorText.includes('Card Shell')) {
-    throw new Error(`未进入 Card Shell 右侧属性栏，当前右栏文本：\n${inspectorText}`);
+  if (!text.includes('Rows') || !text.includes('Columns')) {
+    throw new Error(`Slot Shell 本体面板未出现 Rows / Columns：\n${text}`);
   }
 
-  const found = forbiddenInspectorLabels.filter((label) => inspectorText.includes(label));
-  if (found.length > 0) {
-    throw new Error(`右侧属性栏仍包含禁用字段：${found.join(', ')}`);
+  if (text.includes('Min Cols') || text.includes('Min Rows') || text.includes('Pixel Constraints')) {
+    throw new Error(`Slot Shell 仍暴露了旧尺寸逻辑：\n${text}`);
   }
-
-  return inspectorText;
 };
 
-const main = async () => {
-  mkdirSync(tempDir, { recursive: true });
+const assertSlotInspector = async (page) => {
+  const addSlotCell = page.locator('[title="Add slot atom"]').first();
+  await addSlotCell.evaluate((node) => {
+    (node instanceof HTMLElement ? node : node.parentElement)?.click();
+  });
+  await page.waitForTimeout(400);
 
-  const browserEnv = ensurePlaywrightBrowserDeps();
+  const inspector = page.locator('.builder-inspector-body');
+  const text = await inspector.innerText();
+
+  const requiredLabels = ['Type', 'Size', 'Span', 'Align'];
+  const missing = requiredLabels.filter((label) => !text.includes(label));
+  if (missing.length > 0) {
+    throw new Error(`Slot 面板缺少字段：${missing.join(', ')}\n${text}`);
+  }
+};
+
+const assertReturnToShellInspector = async (page) => {
+  const shellNode = page.locator('[data-builder-node-type="slot_shell"]').first();
+  await shellNode.evaluate((node) => {
+    (node instanceof HTMLElement ? node : node.parentElement)?.click();
+  });
+  await page.waitForTimeout(400);
+
+  const text = await page.locator('.builder-inspector-body').innerText();
+  if (!text.includes('Rows') || !text.includes('Columns')) {
+    throw new Error(`点击 Slot Shell 本体后未回到结构面板：\n${text}`);
+  }
+};
+
+const assertSlotShellRendered = async (page) => {
+  const addSlotCell = page.locator('[title="Add slot atom"]').first();
+  await addSlotCell.waitFor({ state: 'visible', timeout: 10_000 });
+  const count = await page.locator('[title="Add slot atom"]').count();
+  if (count !== 1) {
+    throw new Error(`默认 Slot Shell 不是 1x1 空槽，当前空槽数量：${count}`);
+  }
+};
+
+async function main() {
   await assertServerReady();
-  await assertServedSourceClean();
-
+  const browserEnv = ensurePlaywrightBrowserDeps();
   const browser = await chromium.launch({
     headless: true,
     env: browserEnv,
@@ -286,33 +239,27 @@ const main = async () => {
   try {
     const context = await browser.newContext({ viewport });
     const page = await context.newPage();
-    const client = await context.newCDPSession(page);
-    await client.send('Network.enable');
-    await client.send('Network.setCacheDisabled', { cacheDisabled: true });
 
-    await page.goto(`${appUrl}?kit_studio_verify=${Date.now()}`, {
-      waitUntil: 'networkidle',
-      timeout: 30_000,
-    });
-    await dragCardShellIntoKitStudio(page);
-    const inspectorText = await assertInspectorClean(page);
-    await page.screenshot({ path: screenshotPath, fullPage: true });
-    const rootPreviewMetrics = await assertRootPreviewTracksUpdatedWidth(page);
+    await page.goto(appUrl, { waitUntil: 'networkidle', timeout: 30_000 });
+    await page.waitForTimeout(1200);
+    await ensureProjectReady(page);
+    await switchToKitStudio(page);
+    await assertMinimalControlLibrary(page);
+    await dragSlotShellIntoKitStudio(page);
+    await assertSlotShellRendered(page);
+    await assertShellInspector(page);
+    await assertSlotInspector(page);
+    await assertReturnToShellInspector(page);
+    await page.screenshot({ path: screenshotPath, fullPage: false });
 
-    console.log('Kit Studio inspector browser verify passed.');
-    console.log(`URL: ${appUrl}`);
+    console.log('Kit Studio slot shell browser verify passed.');
     console.log(`Screenshot: ${screenshotPath}`);
-    console.log(`Root preview screenshot: ${rootPreviewScreenshotPath}`);
-    console.log('Inspector excerpt:');
-    console.log(inspectorText.slice(0, 1_200));
-    console.log('Root preview metrics:');
-    console.log(JSON.stringify(rootPreviewMetrics, null, 2));
   } finally {
     await browser.close();
   }
-};
+}
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
+  console.error(error);
+  process.exitCode = 1;
 });

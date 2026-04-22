@@ -505,6 +505,29 @@
 7. `processing-state-card`
 8. `composer-box`
 
+### 7.1.1 第一批已落库（2026-04-22）
+
+本轮先落库一组能覆盖媒体、设置、选择、状态四类高频组装场景的控件：
+
+- `media-summary-card`：已作为 `media_summary_card` 控件进入左侧栏，右栏支持内容、媒体、字体、边框、圆角、尺寸等配置。
+- `media-list-item`：已作为 `media_list_item` 控件进入左侧栏，适合视频 / 文档 / 推荐项单行模式。
+- `setting-row`：已作为 `setting_row` 控件进入左侧栏，支持 `switch / badge / button` 三种尾部形态。
+- `choice-chip-group`：已作为 `choice_chip_group` 控件进入左侧栏，先用文本列表承接选项配置。
+- `empty-state-card`：已作为 `empty_state_card` 控件进入左侧栏，支持图标标记、标题、描述和 CTA。
+
+同步补入的 P1 基础控件：
+
+- `image`：单图 / 媒体占位。
+- `badge`：状态标签。
+- `checkbox-item`：单个完整复选项，区别于整组 `checkbox group`。
+
+后续第二批优先补：
+
+- `media-list`
+- `processing-state-card`
+- `composer-box`
+- `identity-meta-row`
+
 ## 7.2 P2 第二优先级
 
 1. `identity-meta-row`

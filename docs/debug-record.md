@@ -3543,6 +3543,7 @@
 - 只重启 `3000` 的 Vite 开发服
 - 不新开浏览器窗口，继续复用当前 Chrome 调试页
 - 重启后强制跳转刷新同一页面并重新截图验证
+- 若仅重启仍继续服务旧 CSS，则额外清空 `node_modules/.vite` 后再重启一次
 
 #### 重开条件
 
@@ -3554,6 +3555,7 @@
 - 结束旧 `3000` Vite 进程
 - 重新执行 `npm run dev` 绑定 `3000`
 - 在同一 Chrome target 中禁用缓存并跳转到带时间戳参数的 `3000` URL
+- 如果开发服返回的 `/src/index.css` 片段仍是旧规则，再执行一次 `rm -rf node_modules/.vite`
 
 #### 修复后回填项
 
@@ -3569,6 +3571,75 @@
 
 - `2026-04-22`：发现当前 `3000` 页面和页面内 fetch 均仍读取旧 CSS
 - `2026-04-22`：重启同一端口 Vite，不新开浏览器窗口，确认新 CSS 已生效并完成截图回测
+- `2026-04-22`：左栏分组改造时同类问题再次出现，`assetLibrary / AssetLibraryRail / index.css` 一度继续返回旧模块；再次通过重启同一 `3000` 端口恢复
+- `2026-04-22`：统一左右栏纵向留白时再次复现；单纯重启后 `/src/index.css` 仍返回旧分组间距规则，补充清空 `node_modules/.vite` 后恢复正常
+- `2026-04-22`：组件 inspector 顶部摘要块修复时，同类问题扩展到 `WidgetInspectorPanel.tsx`；源码与开发服模块不一致，清空 `node_modules/.vite` 并重启同一端口后恢复
+- `2026-04-22`：组件标题联动修复时，同类问题再次扩展到 `BuilderPage.tsx / InspectorPanelShell.tsx`；源码改动未被开发服返回，清空 `node_modules/.vite` 并重启同一端口后恢复
+- `2026-04-22`：左栏收藏星标放大时再次复现；源码已是 `size={13}`，但 `3000` 返回的 `AssetLibraryRail.tsx / AssetRailItem.tsx` 仍是旧 `size: 11`，清空 `node_modules/.vite` 并重启同端口后恢复
+
+---
+
+### 11. ResizeObserver benign warning 污染浏览器回测错误信号
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：首批 P2/P1 控件浏览器回测
+
+#### 现象
+
+- 首批 P2/P1 控件左栏与拖入验证成功后，`window.__builderLastError` 被写入：
+  - `ResizeObserver loop completed with undelivered notifications.`
+- 页面没有白屏或功能中断，但自动回测会把它识别成错误。
+
+#### 当前判断
+
+- 这是浏览器在高频布局测量下常见的 ResizeObserver benign warning。
+- 当前验证场景里不影响控件创建、拖入、选中与右栏渲染。
+- 但它会污染开发态错误捕获信号，降低后续回测判断可信度。
+
+#### 相关文件
+
+- `src/App.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 固定 Chrome 页面回测时的 `window.__builderLastError` 判断
+- 后续 Kit Studio 拖拽 / 缩放 / 新控件验证脚本的误报率
+
+#### 当前处理决定
+
+- 仅在开发态错误捕获中忽略两类 ResizeObserver benign warning。
+- 不吞掉其他 `error` 和 `unhandledrejection`。
+
+#### 重开条件
+
+- ResizeObserver warning 伴随实际 UI 崩溃、白屏、无法拖入或布局错乱
+- 出现新的非 benign ResizeObserver 错误信息
+
+#### 维修方案
+
+- 在 `App` 的开发态 `error` 监听中加入 message 过滤。
+- 仅过滤：
+  - `ResizeObserver loop completed with undelivered notifications.`
+  - `ResizeObserver loop limit exceeded`
+
+#### 修复后回填项
+
+- 根因确认：开发态全局错误捕获把浏览器 benign ResizeObserver warning 当成真实错误写入 `window.__builderLastError`
+- 实际改动文件清单：
+  - `src/App.tsx`
+  - `docs/debug-record.md`
+- 验证方式 / 回归结果：
+  - `npm run lint -- --pretty false`
+  - 同一 Chrome 页面验证首批 P2/P1 控件左栏出现、`Media Summary` 可拖入、右栏分组可正常渲染
+
+#### 更新日志
+
+- `2026-04-22`：发现 P2/P1 控件验证成功但 `__builderLastError` 被 ResizeObserver benign warning 污染
+- `2026-04-22`：完成开发态过滤，保留真实错误捕获
 
 ---
 
@@ -3577,6 +3648,976 @@
 复制以下模板追加：
 
 ```md
+### 12. 右侧 Inspector 头部下方留白回归
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`Kit Studio` 右侧栏头部留白微调
+
+#### 现象
+
+- 右侧 `component inspector` 顶部标题栏下方出现额外空白
+- 首个大组没有及时顶上来，视觉上比左栏更“掉下去”一截
+
+#### 当前判断
+
+- 这次回归来自将 `.builder-inspector-scroll-body` 的 `padding-top` 全局加到左右两侧
+- 左栏有自己的首组结构，保留这一层 padding 没问题
+- 右栏则会和首组自身的 `margin-top` 叠加，导致头部下方空白偏大
+
+#### 相关文件
+
+- `src/index.css`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 右侧 `component / project / theme / account` inspector 的顶部视觉节奏
+- 右栏大组与标题栏的贴合关系
+
+#### 当前处理决定
+
+- 仅移除右侧公用滚动体的顶部 padding
+- 保留左栏专用 `builder-asset-library-scroll-body` 的顶部 padding
+- 继续复用同一个 `3000` Chrome 页面回测，不新开窗口
+
+#### 重开条件
+
+- 右侧栏再次出现标题栏下方空一整段的问题
+- 或后续发现 `project / theme / account / component` 某一种模式顶部节奏不一致
+
+#### 维修方案
+
+- 保持左栏顶部节奏不动
+- 将右栏顶部节奏只交给首个 section / group 自身的 `margin-top`
+- 不再对右栏滚动体额外叠加顶部 padding
+
+#### 修复后回填项
+
+- 根因确认：右栏滚动体 `padding-top` 与首组 `margin-top` 叠加，造成头部下方多出一层空白
+- 实际改动文件清单：
+  - `src/index.css`
+  - `docs/debug-record.md`
+- 验证方式 / 回归结果：
+  - 固定 `3000` 页面强制带时间戳刷新
+  - 右栏 `theme inspector` 顶部空白已收紧
+  - 同页回测右栏首组位置恢复正常
+
+#### 更新日志
+
+- `2026-04-22`：发现右侧栏头部下方多余留白，首组未能及时顶上
+- `2026-04-22`：移除右栏滚动体顶部 padding，固定页面强刷回测通过
+
+---
+
+### 13. 组件 Inspector 顶部摘要块未移除
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`Kit Studio` 组件 / 卡片右侧属性栏
+
+#### 现象
+
+- 用户切到组件 / 卡片设置面板时，顶部仍存在一块摘要文字
+- 具体表现为标题栏下方先出现一块 `CONTROL / Heading` 或同类摘要，然后才进入真正的大组属性块
+
+#### 当前判断
+
+- 这不是滚动体顶部留白本身的问题
+- 真正占位的是 `WidgetInspectorPanel` 顶部那块选中对象摘要 section
+- 它与右侧标题栏里的 inspector 标题形成重复表达
+
+#### 相关文件
+
+- `src/components/builder-page/WidgetInspectorPanel.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 组件 / 卡片 inspector 的首屏密度
+- 首个属性大组与标题栏之间的贴合度
+
+#### 当前处理决定
+
+- 直接移除 `WidgetInspectorPanel` 顶部摘要 section
+- 保留下面真正的属性大组结构不动
+- 不顺手改 project / theme / account inspector
+
+#### 重开条件
+
+- 后续需要重新展示组件来源、层级类型、模板来源时
+- 或首个属性大组顶部节奏再次被其他摘要信息撑开
+
+#### 维修方案
+
+- 组件 / 卡片 inspector 不再单独渲染顶部摘要块
+- 若后续确实需要来源信息，优先放回标题栏 badge 或局部 section 内，而不是单独占一整块
+
+#### 修复后回填项
+
+- 根因确认：`WidgetInspectorPanel` 顶部固定渲染了一块摘要 section，内容与标题栏重复
+- 实际改动文件清单：
+  - `src/components/builder-page/WidgetInspectorPanel.tsx`
+  - `docs/debug-record.md`
+- 验证方式 / 回归结果：
+  - 已沿组件 inspector 代码路径确认占位来源
+  - 顶部摘要 section 已移除，后续将直接从首个属性大组开始渲染
+
+#### 更新日志
+
+- `2026-04-22`：用户指出切到卡片 / 控件设置面板后，顶部摘要文字仍在
+- `2026-04-22`：确认问题来源不是右栏壳体间距，而是组件 inspector 自身的摘要 section；已移除
+
+---
+
+### 14. 右侧标题未关联当前操作对象名称
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`Kit Studio` 组件 / 卡片 inspector 头部标题
+
+#### 现象
+
+- 右侧标题栏左侧标题文字固定显示 `Component Inspector`
+- 即使当前已经选中具体控件或卡片，标题也不会随对象名称切换
+
+#### 当前判断
+
+- 标题来源是 `BuilderPage` 里的 `inspectorMeta`
+- `widget` 模式下标题不该取控件内容文本，而应取控件类型名本身
+- 同一位置右侧的 `COMPONENT` badge 会占用标题空间，影响识别
+
+#### 相关文件
+
+- `src/pages/BuilderPage.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 组件 / 卡片 inspector 的头部识别效率
+- 用户在切换不同控件时的定位效率
+
+#### 当前处理决定
+
+- `widget` 模式标题改为直接跟随控件类型名
+- 不再读取 `text / title / label / placeholder` 这类内容字段
+- 移除 `widget` 模式标题右侧的 `Component` badge
+
+#### 重开条件
+
+- 后续出现某些控件标题取值不合理
+- 或需要区分“对象名称”和“对象类型名”两套显示语义
+
+#### 维修方案
+
+- `widget` 模式标题直接绑定 `selectedWidgetInspectorLabel`
+- 仅保留标题文字，不再在旁边附加 `Component` badge
+
+#### 修复后回填项
+
+- 根因确认：`widget` inspector 标题绑定到了不合适的内容层，并且 badge 额外压缩了标题空间
+- 实际改动文件清单：
+  - `src/components/builder-page/InspectorPanelShell.tsx`
+  - `src/pages/BuilderPage.tsx`
+  - `docs/debug-record.md`
+- 验证方式 / 回归结果：
+  - 固定 `3000` 页面切到 `Kit studio`
+  - 真实拖入并选中 `Heading`
+  - 右栏标题已改为 `Heading`
+  - 标题右侧 `Component` 标签已移除
+
+#### 更新日志
+
+- `2026-04-22`：用户要求右侧标题随当前操作对象名称切换
+- `2026-04-22`：`widget` 模式标题已改为动态绑定当前对象显示名
+- `2026-04-22`：用户确认标题应是控件类型名本身，而不是内容文本；同时移除右侧 `Component` badge
+
+---
+
+### 15. 中间工具栏高度与左右栏不一致
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`Kit Studio / Canvas` 顶部工具栏
+
+#### 现象
+
+- 中间工具栏高度高于左右两侧 inspector / asset rail 头部
+- 视觉上中间这条更厚，三栏顶边没有完全对齐
+
+#### 当前判断
+
+- 左右栏头部高度都是 `42px`
+- 中间 `CanvasSurfaceHeader` 仍保留旧的 `min-h-[52px]`
+
+#### 相关文件
+
+- `src/components/builder-page/CanvasSurfaceHeader.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 三栏顶部工具区的视觉对齐
+- 编辑区整体的横向秩序感
+
+#### 当前处理决定
+
+- 只调整中间 `CanvasSurfaceHeader` 外层容器高度与垂直 padding
+- 不动内部功能按钮和业务逻辑
+
+#### 重开条件
+
+- 后续发现中间工具栏内部控件在 `42px` 高度下发生裁切
+- 或页面模式切换后再次出现三栏顶部不齐
+
+#### 维修方案
+
+- 中间栏外层高度与左右栏统一到 `42px`
+- 垂直 padding 同步回收，保证视觉高度一致
+
+#### 修复后回填项
+
+- 根因确认：中间栏沿用了旧的 `52px` 高度壳体，未跟左右 inspector toolbar 一起统一
+- 实际改动文件清单：
+  - `src/components/builder-page/CanvasSurfaceHeader.tsx`
+  - `docs/debug-record.md`
+- 验证方式 / 回归结果：
+  - 固定 `3000` 页面实测左右栏头部为 `42px`
+  - 中间栏已从 `52px` 调整到 `42px`
+  - 三栏顶部已对齐
+
+#### 更新日志
+
+- `2026-04-22`：用户要求中间工具栏高度与左右栏拉齐
+- `2026-04-22`：已将中间头部从 `52px` 收到 `42px`
+
+---
+
+### 16. 编辑器按钮与同类外壳高度不统一
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`Builder Shell / Kit Studio / Inspector`
+
+#### 现象
+
+- 顶部主工具栏按钮高度混用 `36px`、`32px`、`28px`
+- 画布头部按钮、切换器、下拉框与右侧 inspector 快捷切换按钮不在同一尺寸体系
+- 左侧资产项、右侧输入框、右侧图标按钮虽然接近，但缺少统一 token 约束
+
+#### 当前判断
+
+- 交互壳体的高度长期散落在 `h-8`、`h-9`、`h-10`、`23px`、`24px`、`28px`
+- 主要问题不是单个按钮，而是缺少一层“toolbar / panel”两级高度规范
+- 修复过程中一度被 `3000` 开发服旧 transform 干扰，页面继续显示旧 class
+
+#### 相关文件
+
+- `src/index.css`
+- `src/pages/BuilderPage.tsx`
+- `src/components/BuilderShellPanels.tsx`
+- `src/components/ProtocolPanels.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- Builder 顶部操作区的整齐度
+- Kit Studio 画布头部与模式切换的一致性
+- 左右 inspector / asset rail 的控件节奏
+
+#### 当前处理决定
+
+- 不改业务逻辑，只抽公共高度 token 与通用 class
+- 将编辑器 chrome 统一分成两档：
+  - `toolbar = 28px`
+  - `panel = 24px`
+
+#### 重开条件
+
+- 后续新增按钮再次直接写死 `h-8 / h-9 / h-10`
+- 某些特殊控件需要第三套高度体系且无法复用现有两档
+
+#### 维修方案
+
+- 在 `src/index.css` 新增：
+  - `--builder-toolbar-control-height: 28px`
+  - `--builder-panel-control-height: 24px`
+- 抽出共享类：
+  - `builder-toolbar-control`
+  - `builder-toolbar-pill-control`
+  - `builder-toolbar-icon-control`
+  - `builder-panel-control`
+  - `builder-panel-pill-control`
+  - `builder-panel-icon-control`
+- 统一接入到：
+  - 顶部主工具栏按钮
+  - Kit Studio 画布头部按钮 / select / 模式切换
+  - 左侧资产条目
+  - 右侧 inspector 快捷切换按钮
+  - Project / Version 面板里的图标按钮与小操作按钮
+
+#### 修复后回填项
+
+- 根因确认：缺少统一的按钮高度 token，导致不同区域长期各写各的；同时 `3000` 开发服旧 transform 造成误判
+- 实际改动文件清单：
+  - `src/index.css`
+  - `src/pages/BuilderPage.tsx`
+  - `src/components/BuilderShellPanels.tsx`
+  - `src/components/ProtocolPanels.tsx`
+  - `docs/debug-record.md`
+- 验证方式 / 回归结果：
+  - 清理 `node_modules/.vite` 后重启 `3000` 开发服
+  - 在同一个 Chrome `3000` 页面回测，不新开窗口
+  - 实测高度：
+    - 顶部主工具栏按钮：`28px`
+    - 画布头部 chip / select / mode toggle：`28px`
+    - inspector quick mode / input / asset item / panel icon：`24px`
+  - 回测截图：
+    - `temp/builder-button-height-unified.png`
+
+#### 更新日志
+
+- `2026-04-22`：用户要求系统中按钮类与同类外壳组件保持一致高度
+- `2026-04-22`：完成两级高度规范落地，并在固定 `3000` 页面回测通过
+
+---
+
+### 17. 右侧 Inspector 标题栏残留类别 Badge
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`Builder / Right Inspector`
+
+#### 现象
+
+- 右侧标题栏在 `Project`、`Theme`、`Account` 等面板里仍显示右上角小 badge
+- 该标签已不再需要，且占用标题栏空间，破坏统一性
+
+#### 当前判断
+
+- 标题栏壳体 `InspectorPanelShell` 仍保留通用 `badge` 渲染口
+- `BuilderPage` 继续向不同 inspector mode 传入 `Project / Theme / Account / Relation / Shell`
+
+#### 相关文件
+
+- `src/components/builder-page/InspectorPanelShell.tsx`
+- `src/pages/BuilderPage.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 右侧 Inspector 顶部标题栏的视觉纯净度
+- 各 inspector 面板之间的统一性
+
+#### 当前处理决定
+
+- 直接移除标题栏 badge 能力，不保留面板例外
+
+#### 重开条件
+
+- 后续明确需要在标题栏恢复某种状态标签
+
+#### 维修方案
+
+- 删除 `InspectorPanelShell` 的 `badge` prop 和渲染
+- 同步移除 `BuilderPage` 中 `inspectorMeta.badge` 生成与传递
+
+#### 修复后回填项
+
+- 根因确认：标题栏组件仍保留旧的 badge 接口，页面层也持续传值
+- 实际改动文件清单：
+  - `src/components/builder-page/InspectorPanelShell.tsx`
+  - `src/pages/BuilderPage.tsx`
+  - `docs/debug-record.md`
+
+#### 更新日志
+
+- `2026-04-22`：用户要求移除右侧标题栏残留 badge
+- `2026-04-22`：已移除全部 inspector 标题栏 badge 能力
+
+---
+
+### 18. Pages Board 顶部工具栏仍保留旧的 52px 高度
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`Page Board / Center Toolbar`
+
+#### 现象
+
+- 左右 inspector 头部已经统一为 `42px`
+- 中间 `Pages Board` 顶部工具栏仍显示更厚，视觉上像“又被改回去了”
+
+#### 当前判断
+
+- 右侧 badge 移除本身没有改动头部高度
+- 真正未统一的是 `page-board-toolbar`，仍沿用旧的 `52px`
+
+#### 相关文件
+
+- `src/index.css`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 三栏顶部对齐感
+- Page Board 模式下的工具栏视觉密度
+
+#### 当前处理决定
+
+- 只把 `page-board-toolbar` 从 `52px` 收回 `42px`
+- 不改内部按钮、不改交互逻辑
+
+#### 重开条件
+
+- 后续在 Page Board 模式发现内部按钮发生裁切
+
+#### 维修方案
+
+- 将 `src/index.css` 中 `page-board-toolbar` 的 `height/min-height` 统一改为 `42px`
+
+#### 修复后回填项
+
+- 根因确认：Page Board 顶部壳体独立于左右 inspector，仍保留旧的 `52px` 样式
+- 实际改动文件清单：
+  - `src/index.css`
+  - `docs/debug-record.md`
+
+#### 更新日志
+
+- `2026-04-22`：用户指出移除 badge 后中间工具栏看起来又回到旧高度
+- `2026-04-22`：确认根因是 `page-board-toolbar` 仍为 `52px`，已改回 `42px`
+
+---
+
+### 19. 中间工具栏残留装饰性浮层标签
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`Canvas Header / Page Board Toolbar`
+
+#### 现象
+
+- `Kit Studio` 顶部仍有 `MASTER`、`Master board`、`0 masters` 这类浮层标签
+- `Pages Board` 标题旁仍有统计用的胶囊标签
+- 这些标签不承担必要操作，只增加视觉装饰感
+
+#### 当前判断
+
+- 中间工具栏内仍保留旧的 badge / summary 结构
+- 标题、切换器、下拉选择和操作按钮已经足够表达当前状态
+
+#### 相关文件
+
+- `src/components/builder-page/CanvasSurfaceHeader.tsx`
+- `src/components/PageBoard.tsx`
+- `src/index.css`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 中间工具栏的简洁度
+- 顶部 chrome 的视觉噪音
+
+#### 当前处理决定
+
+- 直接移除工具栏中的装饰性标签类元素
+- 保留标题、模式切换、下拉框与功能按钮
+
+#### 重开条件
+
+- 后续明确需要恢复某个状态标签，且有实际操作或状态指示价值
+
+#### 维修方案
+
+- 删除 `CanvasSurfaceHeader` 中的 `Master / Editor / Master board / count / nodes` 标签
+- 删除 `PageBoard` 标题旁的 `page-board-toolbar-summary`
+- 同步移除无用样式与无用参数
+
+#### 修复后回填项
+
+- 根因确认：中间工具栏沿用旧的 badge / summary 设计，超出当前“只保留必要信息”的要求
+- 实际改动文件清单：
+  - `src/components/builder-page/CanvasSurfaceHeader.tsx`
+  - `src/components/PageBoard.tsx`
+  - `src/index.css`
+  - `docs/debug-record.md`
+
+#### 更新日志
+
+- `2026-04-22`：用户要求移除中间工具栏中非必要的浮层标签类元素
+- `2026-04-22`：已删除装饰性标签，仅保留必要标题与操作控件
+
+---
+
+### 20. 左侧 Controls 缺少收藏与收藏筛选
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`Asset Library / Controls Group`
+
+#### 现象
+
+- 左侧 `Controls` 资产项没有收藏入口，常用控件无法快速标记
+- `Controls` 大组缺少“只看收藏”筛选，控件数量继续增加后查找成本会升高
+- 收藏交互需要与现有拖拽并存，不能破坏控件拖出行为
+
+#### 当前判断
+
+- 左栏资产库只有分组与拖拽渲染，没有单独的控件级偏好状态
+- `Controls` 大组也没有额外的组级筛选开关
+- 收藏状态适合挂在页面层，并用 `localStorage` 做轻量持久化
+
+#### 相关文件
+
+- `src/pages/BuilderPage.tsx`
+- `src/components/builder-page/AssetLibraryRail.tsx`
+- `src/components/builder-page/AssetRailItem.tsx`
+- `src/index.css`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 左侧资产库的高频控件检索效率
+- `Controls` 分组的可维护性与后续扩容体验
+- 收藏按钮与拖拽热区的交互边界
+
+#### 当前处理决定
+
+- 只在 `Controls` 大组内接入收藏与收藏筛选
+- 每个控件项右侧增加五角星按钮，点击写入收藏
+- 在 `Controls` 大组标题右侧增加五角星筛选开关，只显示收藏控件
+- 收藏按钮独立拦截点击 / 指针事件，不抢占拖拽
+
+#### 重开条件
+
+- 需要把收藏能力扩展到 `Cards`、`Kits` 或其他资产层
+- 需要新增“收藏排序置顶”或跨设备同步收藏
+
+#### 维修方案
+
+- 在 `BuilderPage` 增加 `builder_control_favorites` 持久化状态
+- 在 `AssetLibraryRail` 对 `control` 分组增加收藏筛选按钮与空态
+- 在 `AssetRailItem` 为控件项增加右侧星标按钮，并隔离与拖拽的事件冲突
+- 在 `src/index.css` 增加分组级和条目级星标样式
+
+#### 修复后回填项
+
+- 根因确认：左侧资产库此前只覆盖“分组 + 拖拽”主流程，缺少控件偏好层
+- 实际改动文件清单：
+  - `src/pages/BuilderPage.tsx`
+  - `src/components/builder-page/AssetLibraryRail.tsx`
+  - `src/components/builder-page/AssetRailItem.tsx`
+  - `src/index.css`
+  - `docs/debug-record.md`
+- 验证方式：
+  - `npm run lint`
+  - `npm run build`
+  - Chrome CDP 真实回测：从空收藏开始，收藏 `Heading`、`Paragraph`，再用组头星标筛选，仅显示这两个收藏控件
+
+#### 更新日志
+
+- `2026-04-22`：用户要求在左侧控件项增加收藏星标，并在 `Controls` 大组增加收藏筛选
+- `2026-04-22`：已接入收藏持久化、组头筛选按钮、控件项星标与拖拽隔离验证
+- `2026-04-22`：统一组头星标与控件项星标的激活色，并将右侧纵向轴线对齐
+- `2026-04-22`：补强 `Controls` 标题行的装饰线，并将星标右侧余白用线条接续
+- `2026-04-22`：放大组头与控件项五角星的图标和点击热区，改善可点击性
+
+---
+
+### 21. 本地 Windows 同步目录下 Vite 热更新经常漏掉源码变更
+
+- 状态：`resolved`
+- 优先级：`high`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`vite dev / 3000`
+
+#### 现象
+
+- 修改很小的 TSX / CSS 后，前端经常没有变化
+- 服务端会继续返回旧的 transform 结果
+- 每次都要靠清 `node_modules/.vite`、重启 `3000`、强刷浏览器才能确认是否生效
+
+#### 当前判断
+
+- 项目物理上位于本地 Windows 盘的同步目录
+- 但开发服运行在 WSL 内，通过 `/mnt/g/...` 访问该目录
+- 在这类“Windows 本地盘 + 同步目录 + WSL dev server”的组合下，Vite 默认 watcher 会漏掉部分变更
+
+#### 相关文件
+
+- `vite.config.ts`
+- `docs/dev-server-hot-reload.md`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 全部前端小改动的反馈速度
+- HMR 可靠性
+- 3000 端口固定调试链路的稳定性
+
+#### 当前处理决定
+
+- 保持固定 `3000` 端口
+- 对 `/mnt/<盘符>/...` 下的 Windows 盘工作目录启用 Vite 轮询监听
+- 默认不再把“清 `.vite` 缓存 + 重启”当成每次修改的常规动作
+
+#### 重开条件
+
+- 改动源码后，`http://127.0.0.1:3000/src/...` 仍持续返回旧模块
+- 或轮询监听导致不可接受的 CPU 抖动，再单独调节间隔
+
+#### 维修方案
+
+- 在 `vite.config.ts` 中加入：
+  - `server.strictPort = true`
+  - `/mnt/<盘符>/...` 路径下启用 `server.watch.usePolling`
+  - 适中的 `interval / binaryInterval / awaitWriteFinish`
+- 新增 `docs/dev-server-hot-reload.md`，固化本项目 dev server 处理规则
+
+#### 修复后回填项
+
+- 根因确认：不是代码没改，而是 Vite 在当前 Windows 本地同步目录 + WSL 路径访问方式下漏监听源码变化
+- 实际改动文件清单：
+  - `vite.config.ts`
+  - `docs/dev-server-hot-reload.md`
+  - `docs/debug-record.md`
+- 验证方式：
+  - 固定同一个 `3000` 进程
+  - 临时模块 `src/__vite_watch_probe.ts`
+  - 不清缓存、不重启，仅修改 `probeValue: alpha -> beta`
+  - `http://127.0.0.1:3000/src/__vite_watch_probe.ts` 已直接返回新内容
+
+#### 更新日志
+
+- `2026-04-22`：用户指出当前调试链路极不丝滑，每次小改动都要浪费大量时间在清缓存和换浏览器上
+- `2026-04-22`：定位到根因是当前目录下的 Vite watcher 漏监听；已切换为轮询监听并完成直接探针验证
+
+---
+
+### 32. Kit Studio 固定浏览器回测脚本仍锚定旧控件体系
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`scripts/verify-kit-studio-inspector.mjs`
+
+#### 现象
+
+- `KIT_STUDIO_VERIFY_URL=http://127.0.0.1:3000/ npm run verify:kit-inspector` 失败
+- 脚本仍按旧流程：
+  - 从左侧拖 `Card Shell`
+  - 用 `Heading` 做改宽后二次拖动预览校验
+  - 断言右侧栏必须命中旧的 `Card Shell` 面板
+- 在当前 `Slot Shell` 收敛后的体系里，这会产生假失败
+
+#### 当前判断
+
+- 这不是当前 `Kit Studio` 主交互本身坏掉
+- 问题在于固定浏览器回测脚本还锚定旧控件语义，没有跟随底层重构一起升级
+- 如果不修，后续每次回归都会把“结构升级”误判为“功能回退”
+
+#### 相关文件
+
+- `scripts/verify-kit-studio-inspector.mjs`
+- `docs/browser-regression-workflow.md`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 固定浏览器回测链路的可信度
+- `Slot Shell` 重构后的回归验收
+- 后续 agent / 会话接手时的统一验证入口
+
+#### 当前处理决定
+
+- 立即修复，不延后
+- 继续保留 `npm run verify:kit-inspector` 作为唯一固定入口
+- 但把脚本覆盖对象切到当前正式基线：`Slot Shell`
+
+#### 重开条件
+
+- `verify:kit-inspector` 再次引用 `Heading / Card Shell` 作为固定验证对象
+- 左侧 `Controls` 已经切换到新核心资产，但脚本仍按旧资产断言
+- `Round -> single` 或改宽后二次拖动预览宽度同步的断言再次失效
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- 将固定浏览器回测切换为：
+  - 验证左侧核心 `Controls` 只暴露 `Slot Shell`
+  - 拖入 `Slot Shell`
+  - 验证右侧命中 `Structure / Rows & Slots`
+  - 验证 `Multiple Lines -> Add Row`
+  - 验证 `Shape -> Round` 自动收敛为单行并禁用 `Multiple Lines`
+  - 验证改 `Cols` 后根画布二次拖动预览宽度与本体同步
+- 同步更新 `docs/browser-regression-workflow.md`
+
+#### 修复后回填项
+
+- 根因确认：`verify-kit-studio-inspector.mjs` 仍引用旧的 `Card Shell + Heading` 校验路径，和当前 `Slot Shell` 底层体系不一致
+- 实际改动文件清单：
+  - `scripts/verify-kit-studio-inspector.mjs`
+  - `docs/browser-regression-workflow.md`
+  - `docs/debug-record.md`
+- 验证方式：
+  - `KIT_STUDIO_VERIFY_URL=http://127.0.0.1:3000/ npm run verify:kit-inspector`
+  - 浏览器截图：
+    - `temp/kit-studio-inspector-verify.png`
+    - `temp/kit-studio-root-preview-width-verify.png`
+
+#### 更新日志
+
+- `2026-04-22`：在 `3000` 端口实测时发现固定浏览器回测脚本仍按旧体系断言，开始修复
+- `2026-04-22`：已把固定回测基线切换为 `Slot Shell`，并同步更新浏览器回测文档
+
+---
+
+### 33. Inspector Section 折叠头把操作区包进了 toggle 按钮
+
+- 状态：`resolved`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`src/components/builder-page/InspectorPrimitives.tsx`
+
+#### 现象
+
+- `InspectorSection` 在 `collapsible` 模式下，整个头部使用一个大按钮承载
+- `sideSlot / rightSlot` 也被塞进这个 toggle 按钮内部
+- 这会形成“交互控件嵌套在另一个按钮里”的非法结构
+- `Slot Shell` 的 `Rows & Slots -> Add Row / Add Slot` 正好命中这类用法，存在潜在误触发或浏览器兼容风险
+
+#### 当前判断
+
+- 这是通用 inspector 头部组件的结构性问题
+- 不是某一个 `Slot Shell` 专属样式 bug
+- 如果不修，后续任何把按钮、checkbox、toggle 放进 section 头部的块，都可能重复出现同类问题
+
+#### 相关文件
+
+- `src/components/builder-page/InspectorPrimitives.tsx`
+- `src/index.css`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 全部使用 `InspectorSection` 的可折叠 section
+- 右侧 inspector 头部操作区的可点击稳定性
+- 未来继续给 section header 增加快捷操作时的可维护性
+
+#### 当前处理决定
+
+- 立即修复，不保留嵌套按钮结构
+- 折叠 toggle 与操作区彻底拆开
+- 保持现有视觉样式基本不变，只修正结构和交互边界
+
+#### 重开条件
+
+- 再次在 section 头部发现“按钮里套按钮 / checkbox / toggle”的结构
+- `sideSlot / rightSlot` 点击时会误触发 section 折叠
+- 浏览器回测中出现 header 操作按钮不稳定、点不动或误收拢
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `InspectorPrimitives.tsx`：
+  - 将 collapsible section 改为“左侧 toggle 按钮 + 右侧 actions 区”分离结构
+  - 保留 `sideSlot / rightSlot` 的独立事件边界
+- `index.css`：
+  - 增加 `builder-inspector-section-actions`
+  - 让 toggle 与 action 区共享原有高度和对齐规则
+
+#### 修复后回填项
+
+- 根因确认：原实现把 `sideSlot / rightSlot` 直接渲染进 collapsible header 的 `<button>` 内，形成非法嵌套交互结构
+- 实际改动文件清单：
+  - `src/components/builder-page/InspectorPrimitives.tsx`
+  - `src/index.css`
+  - `docs/debug-record.md`
+- 验证方式：
+  - `KIT_STUDIO_VERIFY_URL=http://127.0.0.1:3000/ npm run verify:kit-inspector`
+  - `npm run lint`
+  - `npm run build`
+  - 浏览器实测：`Rows & Slots -> Add Row`
+  - 浏览器实测：`Row 1 -> Add Slot`
+
+#### 更新日志
+
+- `2026-04-22`：在 `Slot Shell` 浏览器回测中，发现 section 头部的操作按钮结构存在隐患，开始修复
+- `2026-04-22`：已将 collapsible section 改为合法结构，并完成固定浏览器回测与构建验证
+
+---
+
+### N. `Slot Shell` 根画布作者态尺寸过小，常用控件无法可视化搭建
+
+- 状态：`resolved`
+- 优先级：`high`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`src/builder/slotShell.ts`
+
+#### 现象
+
+- 本轮用真实用户操作，在 `Kit Studio` 内手工搭了 5 个常用控件：
+  - `Title`
+  - `Paragraph`
+  - `Icon + Text Action`
+  - `Divider`
+  - `Chart Mount`
+- 控件都能通过右侧面板配置成功，但落在根画布上的可视结果几乎都过小
+- 文字类控件只剩单个字母或逐字竖排
+- `Divider` 几乎不可见
+- `Object` 类控件只剩极小占位，无法承担作者态预览
+- 这意味着“能配出来”不等于“能正常搭建和判断效果”
+
+#### 当前判断
+
+- 当前 `Slot Shell` 的根画布宽高，仍主要由 `rowCount / columnCount / rowHeight` 推导
+- 这对结构合同是成立的，但对“用户在 Kit Studio 里实际生产控件母版”的作者态并不成立
+- 当前缺的是“作者态最小可视尺寸”或“内容预览尺寸”语义
+- 同时，文本 / object / divider 这类内容没有参与根画布最小宽度判断，导致内容会被压缩到逐字换行
+
+#### 相关文件
+
+- `src/builder/slotShell.ts`
+- `src/components/patterns/SlotShellWidgets.tsx`
+- `src/builder/WidgetWrapper.tsx`
+- `src/components/KitFactoryBoard.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 全部以 `Slot Shell` 为基础的 control 母版制作流程
+- `Kit Studio` 中用户对控件的可视化搭建效率
+- 后续要做的第一批常用控件预设质量
+- 导入外部组件后，在根画布上做人工校对的体验
+
+#### 当前处理决定
+
+- 已直接修复
+- 根画布作者态与容器内结构态分离
+- 根画布上的 `Slot Shell` 允许更大的预览尺寸，容器内仍按结构尺寸自适应
+
+#### 重开条件
+
+- 继续用浏览器真实搭建任意 3 个以上常用控件时，仍出现“只看得到点 / 单字 / 竖排字”
+- 用户仍无法在根画布上直接判断控件母版的真实结构
+- 新增的 `text / divider / object` 预设仍需要完全依赖右侧栏盲配
+
+#### 维修方案
+
+- 当前状态：`已完成`
+- `slotShell.ts`
+  - 新增根画布作者态尺寸推导
+  - 根据 `text / media / object / divider / empty` 等 slot 内容估算预览宽高
+- `WidgetWrapper.tsx`
+  - 仅在 `Kit Studio` 根画布使用作者态尺寸
+  - 卡内 / 载体内继续沿用原有结构尺寸逻辑
+
+#### 修复后回填项
+
+- 根因确认：原来根画布的 `Slot Shell` 直接使用结构尺寸，导致作者态预览过小，不适合人工搭建
+- 实际改动文件清单：
+  - `src/builder/slotShell.ts`
+  - `src/builder/WidgetWrapper.tsx`
+  - `docs/debug-record.md`
+- 验证方式：
+  - `./node_modules/.bin/tsc --noEmit --pretty false`
+  - 浏览器手工搭建并发布：
+    - `Page Title`
+    - `Summary Copy`
+    - `Settings`
+    - `Status`
+    - `Sales Chart`
+
+#### 更新日志
+
+- `2026-04-22`：在本地模式下，用浏览器真实手造 5 个常用控件，确认 `Slot Shell` 根画布作者态尺寸过小，已登记
+- `2026-04-22`：已将根画布作者态尺寸与容器内结构尺寸拆开，并再次完成浏览器手工搭建验证
+
+---
+
+### N. `Slot Shell` 根画布作者态尺寸放大后，邻近母版可能发生重叠
+
+- 状态：`deferred`
+- 优先级：`medium`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`src/builder/WidgetWrapper.tsx`
+
+#### 现象
+
+- 修复作者态尺寸后，根画布上的 `Slot Shell` 预览明显更可读
+- 但如果连续在相近位置落下多个母版，后续控件在尺寸放大后可能和邻近控件发生重叠
+- 本轮真实手工搭建 5 个常用控件时，`Page Title` 与 `Settings` 一度出现贴近甚至覆盖风险
+
+#### 当前判断
+
+- 控件落地时使用的是初始占位尺寸
+- 真正的作者态尺寸会在 `Slot Shell` 渲染后再回写到布局
+- 回写后目前没有触发根画布重排或碰撞解开逻辑
+
+#### 相关文件
+
+- `src/builder/WidgetWrapper.tsx`
+- `src/components/KitFactoryBoard.tsx`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- `Kit Studio` 根画布上连续创建多个控件母版的流程
+- 控件母版批量制作时的排布稳定性
+
+#### 当前处理决定
+
+- 先登记，不在本轮继续追
+- 先保住“作者态可看见”和“可发布到左栏”这两个关键目标
+
+#### 重开条件
+
+- 再次批量制作多个 `Slot Shell` 母版时频繁相互覆盖
+- 用户无法顺序搭建多个控件而必须手动大量挪位
+
+#### 维修方案
+
+- 当前状态：`待后续确定`
+- 可选方向：
+  - 根画布在作者态尺寸回写后执行一次安全避让
+  - 或在 drop 阶段就使用作者态预估尺寸
+
+#### 修复后回填项
+
+- 根因确认
+- 实际改动文件清单
+- 验证方式
+
+#### 更新日志
+
+- `2026-04-22`：在修复作者态尺寸后，真实手工搭建多控件时发现邻近母版仍可能重叠，已登记
+
+---
+
 ### N. 问题标题
 
 - 状态：`deferred`

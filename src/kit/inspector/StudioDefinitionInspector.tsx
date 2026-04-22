@@ -160,6 +160,10 @@ const getPathValue = (
       return propValue === true;
     }
 
+    if (propKey === 'labelText') {
+      return propValue ?? value.props.text;
+    }
+
     if (propKey === 'paddingLeft' || propKey === 'paddingRight') {
       return propValue ?? value.props.paddingX ?? 16;
     }
@@ -240,6 +244,13 @@ const updateFieldValue = (
   }
 
   if (field.path.startsWith('props.')) {
+    if (field.path === 'props.labelText') {
+      handlers.onUpdateProps({
+        labelText: nextValue,
+        text: nextValue,
+      });
+      return;
+    }
     handlers.onUpdateProps({
       [field.path.slice('props.'.length)]: nextValue,
     });

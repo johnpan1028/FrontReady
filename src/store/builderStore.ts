@@ -16,6 +16,7 @@ import {
   isWidgetType,
   type WidgetType,
 } from '../builder/widgetConfig';
+import { extractSlotShellLabel } from '../builder/slotShell';
 import type { BuilderWorkspaceScope } from '../builder/workspaceScope';
 import {
   clampPageBoardToTopology,
@@ -128,9 +129,11 @@ interface BuilderStore {
   widgets: Record<string, WidgetData>;
   layouts: Record<string, LegacyLayoutItem[]>;
   selectedId: string | null;
+  selectedSlotShellSlotId: string | null;
   kitStudioWidgets: Record<string, WidgetData>;
   kitStudioLayouts: Record<string, LegacyLayoutItem[]>;
   selectedKitStudioId: string | null;
+  selectedKitStudioSlotShellSlotId: string | null;
   draggedType: WidgetType | 'template' | null;
   editorMode: EditorMode;
   dataSources: BuilderDataSource[];
@@ -185,6 +188,7 @@ interface BuilderStore {
   updateLayoutItem: (id: string, parentId: string, updates: Partial<LegacyLayoutItem>, scope?: BuilderWorkspaceScope) => void;
   updateWidgetProps: (id: string, props: Record<string, any>, scope?: BuilderWorkspaceScope) => void;
   selectWidget: (id: string | null, scope?: BuilderWorkspaceScope) => void;
+  selectSlotShellSlot: (widgetId: string, slotId: string | null, scope?: BuilderWorkspaceScope) => void;
   removeWidget: (id: string, scope?: BuilderWorkspaceScope) => void;
 }
 
@@ -665,7 +669,9 @@ const applyFlattenedProject = (
     kitStudioWidgets: sanitizedPayload.kitStudioWidgets ?? {},
     kitStudioLayouts: sanitizedPayload.kitStudioLayouts ?? { root: [] },
     selectedKitStudioId: null,
+    selectedKitStudioSlotShellSlotId: null,
     selectedId: null,
+    selectedSlotShellSlotId: null,
     draggedType: null,
     lastSavedAt,
     currentVersionId,
@@ -699,6 +705,7 @@ const getPageViewState = (pages: BuilderPage[], selectedPageId: string | null) =
     widgets: flattened.widgets,
     layouts: flattened.layouts,
     selectedId: null,
+    selectedSlotShellSlotId: null,
     draggedType: null,
   };
 };
@@ -812,7 +819,9 @@ const createNoProjectState = ({
   kitStudioWidgets: {},
   kitStudioLayouts: { root: [] },
   selectedId: null,
+  selectedSlotShellSlotId: null,
   selectedKitStudioId: null,
+  selectedKitStudioSlotShellSlotId: null,
   draggedType: null,
   dataSources: createDefaultDataSources(),
   runtimeEnv: {},
@@ -952,7 +961,9 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
   kitStudioWidgets: {},
   kitStudioLayouts: { root: [] },
   selectedId: null,
+  selectedSlotShellSlotId: null,
   selectedKitStudioId: null,
+  selectedKitStudioSlotShellSlotId: null,
   draggedType: null,
   editorMode: 'edit',
   dataSources: createDefaultDataSources(),
@@ -2460,11 +2471,13 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
             kitStudioWidgets: newWidgets,
             kitStudioLayouts: newLayouts,
             selectedKitStudioId: id,
+            selectedKitStudioSlotShellSlotId: null,
           }
         : {
             widgets: newWidgets,
             layouts: newLayouts,
             selectedId: id,
+            selectedSlotShellSlotId: null,
             links: getActionSyncedLinks(toLegacySnapshot({
               ...state,
               widgets: newWidgets,
@@ -2709,8 +2722,20 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
 
   selectWidget: (id, scope = 'page') => set(
     scope === 'kit'
-      ? { selectedKitStudioId: id }
-      : { selectedId: id },
+      ? { selectedKitStudioId: id, selectedKitStudioSlotShellSlotId: null }
+      : { selectedId: id, selectedSlotShellSlotId: null },
+  ),
+
+  selectSlotShellSlot: (widgetId, slotId, scope = 'page') => set(
+    scope === 'kit'
+      ? {
+          selectedKitStudioId: widgetId,
+          selectedKitStudioSlotShellSlotId: slotId,
+        }
+      : {
+          selectedId: widgetId,
+          selectedSlotShellSlotId: slotId,
+        },
   ),
 
   removeWidget: (id, scope = 'page') => set((state) => {
@@ -2749,11 +2774,17 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
             kitStudioWidgets: newWidgets,
             kitStudioLayouts: newLayouts,
             selectedKitStudioId: nextSelectedKitStudioId,
+            selectedKitStudioSlotShellSlotId: removedIds.has(state.selectedKitStudioId ?? '')
+              ? null
+              : state.selectedKitStudioSlotShellSlotId,
           }
         : {
             widgets: newWidgets,
             layouts: newLayouts,
             selectedId: nextSelectedId,
+            selectedSlotShellSlotId: removedIds.has(state.selectedId ?? '')
+              ? null
+              : state.selectedSlotShellSlotId,
             links: getActionSyncedLinks(toLegacySnapshot({
               ...state,
               widgets: newWidgets,
@@ -2779,6 +2810,10 @@ export const useBuilderStore = create<BuilderStore>((set, get) => ({
       : null;
     const baseName = typeof currentWidget?.props?.title === 'string' && currentWidget.props.title
       ? String(currentWidget.props.title)
+      : extractSlotShellLabel(currentWidget?.props?.rows)
+        ? String(extractSlotShellLabel(currentWidget?.props?.rows))
+      : typeof currentWidget?.props?.labelText === 'string' && currentWidget.props.labelText
+        ? String(currentWidget.props.labelText)
       : typeof currentWidget?.props?.text === 'string' && currentWidget.props.text
         ? String(currentWidget.props.text)
         : `Template ${state.customTemplates.length + 1}`;

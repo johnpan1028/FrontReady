@@ -105,38 +105,56 @@ export function InspectorSection({
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const shouldRenderBody = (!collapsible || isOpen) && (!hideEmptyBody || Children.count(children) > 0);
+  const renderInteractiveSlot = (slot: ReactNode) => (
+    slot ? (
+      <span
+        className="builder-inspector-section-slot"
+        onClick={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        {slot}
+      </span>
+    ) : null
+  );
 
   return (
     <section className={cn('builder-inspector-section', className)}>
       {collapsible ? (
-        <button
-          type="button"
-          className="builder-inspector-section-toggle"
-          onClick={() => setIsOpen((current) => !current)}
-        >
-          <div className="builder-inspector-section-header">
-            <span className="builder-inspector-section-title">{title}</span>
-            {badge ? <span className="builder-inspector-chip">{badge}</span> : null}
-            {sideSlot}
+        <div className="builder-inspector-section-static">
+          <button
+            type="button"
+            className="builder-inspector-section-toggle"
+            onClick={() => setIsOpen((current) => !current)}
+          >
+            <div className="builder-inspector-section-header">
+              <span className="builder-inspector-section-title">{title}</span>
+              {badge ? <span className="builder-inspector-chip">{badge}</span> : null}
+            </div>
+            {rightSlot ? null : (
+              <ChevronDown
+                size={14}
+                className={cn(
+                  'text-hr-muted transition-transform duration-150',
+                  isOpen ? 'rotate-0' : '-rotate-90',
+                )}
+              />
+            )}
+          </button>
+          <div className="builder-inspector-section-actions">
+            {renderInteractiveSlot(sideSlot)}
+            {renderInteractiveSlot(rightSlot)}
           </div>
-          {rightSlot ?? (
-            <ChevronDown
-              size={14}
-              className={cn(
-                'text-hr-muted transition-transform duration-150',
-                isOpen ? 'rotate-0' : '-rotate-90',
-              )}
-            />
-          )}
-        </button>
+        </div>
       ) : (
         <div className="builder-inspector-section-static">
           <div className="builder-inspector-section-header">
             <span className="builder-inspector-section-title">{title}</span>
             {badge ? <span className="builder-inspector-chip">{badge}</span> : null}
-            {sideSlot}
           </div>
-          {rightSlot}
+          <div className="builder-inspector-section-actions">
+            {renderInteractiveSlot(sideSlot)}
+            {renderInteractiveSlot(rightSlot)}
+          </div>
         </div>
       )}
 

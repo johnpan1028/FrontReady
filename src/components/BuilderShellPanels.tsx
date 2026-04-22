@@ -65,7 +65,7 @@ function Field({
 }
 
 const segmentedButtonClassName = (active: boolean) => cn(
-  'inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+  'builder-panel-control builder-panel-pill-control inline-flex gap-2 rounded-lg border text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
   active
     ? 'border-hr-text bg-hr-text text-white shadow-sm'
     : 'border-hr-border bg-transparent text-hr-muted hover:border-hr-text hover:text-hr-text',
@@ -148,7 +148,7 @@ export function ProjectContractPanel({
             type="button"
             onClick={onImportJson}
             disabled={cloudActionsLocked}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary disabled:cursor-not-allowed disabled:opacity-40"
+            className="builder-panel-control builder-panel-icon-control inline-flex rounded-lg border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary disabled:cursor-not-allowed disabled:opacity-40"
             title="Import project bundle"
             aria-label="Import project bundle"
           >
@@ -157,7 +157,7 @@ export function ProjectContractPanel({
           <button
             type="button"
             onClick={onExportJson}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary"
+            className="builder-panel-control builder-panel-icon-control inline-flex rounded-lg border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary"
             title="Export project bundle"
             aria-label="Export project bundle"
           >
@@ -166,7 +166,7 @@ export function ProjectContractPanel({
           <button
             type="button"
             onClick={onExportDeliverable}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary"
+            className="builder-panel-control builder-panel-icon-control inline-flex rounded-lg border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary"
             title="Export frontend deliverable"
             aria-label="Export frontend deliverable"
           >
@@ -203,7 +203,7 @@ export function ProjectContractPanel({
             type="button"
             onClick={() => setIsEditingProjectName(true)}
             className={cn(
-              'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary',
+              'builder-panel-control builder-panel-icon-control inline-flex shrink-0 rounded-md border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary',
               isEditingProjectName && 'border-hr-primary bg-hr-primary/10 text-hr-primary',
             )}
             title={isEditingProjectName ? 'Editing project name' : 'Edit project name'}
@@ -460,7 +460,7 @@ export function ProjectWorkspacePanel({
           type="button"
           onClick={() => selectedProject && onSwitchProject(selectedProject.id)}
           disabled={cloudActionsLocked || !selectedProject || selectedProject.isCurrent}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary disabled:cursor-not-allowed disabled:opacity-40"
+          className="builder-panel-control builder-panel-icon-control inline-flex shrink-0 rounded-xl border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary disabled:cursor-not-allowed disabled:opacity-40"
           title={
             selectedProject
               ? (selectedProject.isCurrent ? `${selectedProject.label} is already active` : `Switch to ${selectedProject.label}`)
@@ -480,7 +480,7 @@ export function ProjectWorkspacePanel({
           onClick={onCreateProject}
           disabled={cloudActionsLocked}
           className={cn(
-            'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+            'builder-panel-control builder-panel-icon-control inline-flex shrink-0 rounded-xl border transition-colors disabled:cursor-not-allowed disabled:opacity-40',
             highlightCreateProject
               ? 'border-hr-primary bg-hr-primary text-white shadow-[0_0_0_3px_rgba(79,124,255,0.14)] hover:bg-hr-primary/90'
               : 'border-hr-border bg-hr-panel text-hr-muted hover:border-hr-primary hover:text-hr-primary',
@@ -495,7 +495,7 @@ export function ProjectWorkspacePanel({
           type="button"
           onClick={() => selectedProject && onDeleteProject(selectedProject.id)}
           disabled={cloudActionsLocked || !selectedProject}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+          className="builder-panel-control builder-panel-icon-control inline-flex shrink-0 rounded-xl border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
           title={
             !selectedProject
               ? 'No project selected'
@@ -724,7 +724,7 @@ export function VersionManagerPanel({
           type="button"
           onClick={() => selectedVersion && onSwitchVersion(selectedVersion.id)}
           disabled={cloudActionsLocked || !selectedVersion || selectedVersion.isCurrent}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary disabled:cursor-not-allowed disabled:opacity-40"
+          className="builder-panel-control builder-panel-icon-control inline-flex shrink-0 rounded-xl border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary disabled:cursor-not-allowed disabled:opacity-40"
           title={
             selectedVersion
               ? (selectedVersion.isCurrent ? `${selectedVersion.versionLabel} is already active` : `Switch to ${selectedVersion.versionLabel}`)
@@ -743,7 +743,7 @@ export function VersionManagerPanel({
           type="button"
           onClick={() => selectedVersion && onSetReleaseVersion(selectedVersion.id)}
           disabled={cloudActionsLocked || !selectedVersion || selectedVersion.isRelease}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-amber-300 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
+          className="builder-panel-control builder-panel-icon-control inline-flex shrink-0 rounded-xl border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-amber-300 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
           title={
             selectedVersion
               ? (selectedVersion.isRelease ? `${selectedVersion.versionLabel} is already the release version` : `Mark ${selectedVersion.versionLabel} as release`)
@@ -762,7 +762,7 @@ export function VersionManagerPanel({
           type="button"
           onClick={() => selectedVersion && onDeleteVersion(selectedVersion.id)}
           disabled={cloudActionsLocked || !selectedVersion || selectedVersion.isCurrent}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+          className="builder-panel-control builder-panel-icon-control inline-flex shrink-0 rounded-xl border border-hr-border bg-hr-panel text-hr-muted transition-colors hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
           title={
             selectedVersion
               ? (selectedVersion.isCurrent ? 'Current version cannot be deleted' : `Delete ${selectedVersion.versionLabel}`)

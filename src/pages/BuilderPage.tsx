@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent 
 import { ResponsiveGridLayout } from 'react-grid-layout';
 import { useContainerWidth } from '../hooks/useContainerWidth';
 import { doesWidgetFollowParentWidth, getDefaultWidgetMinSize } from '../builder/widgetConfig';
+import { normalizeSlotShellContract } from '../builder/slotShell';
 import { BuilderWorkspaceScopeProvider, type BuilderWorkspaceScope } from '../builder/workspaceScope';
 import { useBuilderStore, WidgetType } from '../store/builderStore';
 import { useAppStore } from '../store/appStore';
@@ -93,6 +94,8 @@ const RELATION_LABEL_FONT_SIZES: Record<BuilderPageLink['kind'], number> = {
   'return-page': 11,
 };
 
+const BUILDER_CONTROL_FAVORITES_STORAGE_KEY = 'builder_control_favorites';
+
 const isRelationStrokePattern = (value: unknown): value is RelationStrokePattern => (
   value === 'solid' || value === 'dashed' || value === 'dotted'
 );
@@ -133,6 +136,21 @@ export function BuilderPage() {
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
   const [isVersionMenuOpen, setIsVersionMenuOpen] = useState(false);
   const [pendingVersionId, setPendingVersionId] = useState<string | null>(null);
+  const [favoriteControlAssetIds, setFavoriteControlAssetIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+
+    try {
+      const raw = window.localStorage.getItem(BUILDER_CONTROL_FAVORITES_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? parsed.filter((value): value is string => typeof value === 'string')
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showFavoriteControlsOnly, setShowFavoriteControlsOnly] = useState(false);
   const [pageBoardFitRequestKey, setPageBoardFitRequestKey] = useState(0);
   const [kitStudioFitRequestKey, setKitStudioFitRequestKey] = useState(0);
   const [kitStudioFocusRequestKey, setKitStudioFocusRequestKey] = useState(0);
@@ -175,9 +193,11 @@ export function BuilderPage() {
     widgets,
     layouts,
     selectedId,
+    selectedSlotShellSlotId,
     kitStudioWidgets,
     kitStudioLayouts,
     selectedKitStudioId,
+    selectedKitStudioSlotShellSlotId,
     draggedType,
     customTemplates,
     hydrateProject,
@@ -262,6 +282,19 @@ export function BuilderPage() {
   }, [isVersionMenuOpen]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      window.localStorage.setItem(
+        BUILDER_CONTROL_FAVORITES_STORAGE_KEY,
+        JSON.stringify(favoriteControlAssetIds),
+      );
+    } catch {
+      // Ignore storage failures and keep the in-memory favorites state usable.
+    }
+  }, [favoriteControlAssetIds]);
+
+  useEffect(() => {
     const handleKitRootResizePreview = (event: Event) => {
       const detail = (event as CustomEvent<KitRootResizePreviewEventDetail>).detail;
       if (!detail || detail.action === 'clear') {
@@ -298,6 +331,9 @@ export function BuilderPage() {
   const canApplyProjectBlueprint = pages.length === 0 && links.length === 0;
   const activeWorkspaceScope: BuilderWorkspaceScope = editSurfaceMode === 'kits' ? 'kit' : 'page';
   const activeSelectedId = activeWorkspaceScope === 'kit' ? selectedKitStudioId : selectedId;
+  const activeSelectedSlotShellSlotId = activeWorkspaceScope === 'kit'
+    ? selectedKitStudioSlotShellSlotId
+    : selectedSlotShellSlotId;
   const activeWidgets = activeWorkspaceScope === 'kit' ? kitStudioWidgets : widgets;
   const activeLayouts = activeWorkspaceScope === 'kit' ? kitStudioLayouts : layouts;
   const defaultInspectorMode: InspectorMode = editSurfaceMode === 'kits'
@@ -456,6 +492,19 @@ export function BuilderPage() {
     setDraggedType(null);
   };
   const selectedWidget = activeSelectedId ? activeWidgets[activeSelectedId] : null;
+  const selectedSlotShellSlot = useMemo(() => {
+    if (selectedWidget?.type !== 'slot_shell' || !activeSelectedSlotShellSlotId) return null;
+    const contract = normalizeSlotShellContract(selectedWidget.props);
+
+    for (const row of contract.rows) {
+      const slot = row.slots.find((entry) => entry.id === activeSelectedSlotShellSlotId);
+      if (slot) {
+        return slot;
+      }
+    }
+
+    return null;
+  }, [activeSelectedSlotShellSlotId, selectedWidget]);
   const selectedLayoutItem = selectedWidget ? activeLayouts[selectedWidget.parentId]?.find(l => l.i === activeSelectedId) : null;
   const selectedLayoutItemWithResizePreview = (
     activeWorkspaceScope === 'kit'
@@ -572,9 +621,22 @@ export function BuilderPage() {
       };
     })
   ), [kitStudioRootLayout, kitStudioWidgets]);
+  const favoriteControlAssetIdSet = useMemo(
+    () => new Set(favoriteControlAssetIds),
+    [favoriteControlAssetIds],
+  );
   const visibleAssetSections = useMemo(() => {
-    return getBuilderAssetSectionsForSurface(editSurfaceMode, customTemplates);
-  }, [customTemplates, editSurfaceMode]);
+    return getBuilderAssetSectionsForSurface(editSurfaceMode, customTemplates).map((section) => {
+      if (section.id !== 'control') return section;
+
+      return {
+        ...section,
+        assets: section.assets.filter((asset) => (
+          !showFavoriteControlsOnly || favoriteControlAssetIdSet.has(asset.id)
+        )),
+      };
+    });
+  }, [customTemplates, editSurfaceMode, favoriteControlAssetIdSet, showFavoriteControlsOnly]);
   const gridLayout = useMemo(() => pageRootLayout.map((item) => ({ ...item })), [pageRootLayout]);
   const responsiveLayouts = useMemo(() => ({ lg: gridLayout }), [gridLayout]);
   const canvasSize = useMemo(
@@ -608,6 +670,14 @@ export function BuilderPage() {
   const handleSaveDraft = () => {
     if (cloudActionsLocked || !hasActiveProject) return;
     void saveDraft({ createSnapshot: true, reason: 'manual-save' }).catch(() => {});
+  };
+
+  const handleToggleFavoriteControlAsset = (assetId: string) => {
+    setFavoriteControlAssetIds((current) => (
+      current.includes(assetId)
+        ? current.filter((id) => id !== assetId)
+        : [...current, assetId]
+    ));
   };
 
   const handleVersionSelect = (versionId: string) => {
@@ -968,44 +1038,6 @@ export function BuilderPage() {
     }
   }, [curvePointToolMode, defaultInspectorMode, editSurfaceMode, forcedInspectorMode, selectedLinkId]);
 
-  const inspectorMeta = useMemo(() => {
-    if (inspectorMode === 'theme') {
-      return {
-        title: 'Theme Inspector',
-        badge: 'Theme',
-      };
-    }
-    if (inspectorMode === 'account') {
-      return {
-        title: 'Account Inspector',
-        badge: 'Account',
-      };
-    }
-    if (inspectorMode === 'relation') {
-      return {
-        title: 'Relation Inspector',
-        badge: 'Relation',
-      };
-    }
-    if (inspectorMode === 'page') {
-      return {
-        title: 'Shell Inspector',
-        badge: 'Shell',
-      };
-    }
-    if (inspectorMode === 'widget') {
-      return {
-        title: 'Component Inspector',
-        badge: 'Component',
-      };
-    }
-
-    return {
-      title: 'Project Inspector',
-      badge: 'Project',
-    };
-  }, [inspectorMode]);
-
   const inspectorQuickMode = inspectorMode === 'theme'
     ? 'theme'
     : inspectorMode === 'project'
@@ -1179,6 +1211,24 @@ export function BuilderPage() {
     ? 'Card Shell'
     : selectedWidget?.type === 'shadcn_login_card'
       ? 'Shadcn Login'
+      : selectedWidget?.type === 'slot_shell'
+        ? (selectedSlotShellSlot
+          ? (
+            selectedSlotShellSlot.type === 'text'
+              ? 'Text Slot'
+              : selectedSlotShellSlot.type === 'media'
+                ? 'Media Slot'
+                : selectedSlotShellSlot.type === 'divider'
+                  ? 'Divider Slot'
+                  : selectedSlotShellSlot.type === 'spacer'
+                    ? 'Spacer Slot'
+                    : selectedSlotShellSlot.type === 'object'
+                      ? 'Object Slot'
+                      : 'Empty Slot'
+          )
+          : 'Slot Shell')
+      : selectedWidget?.type === 'icon'
+        ? 'Icon'
       : selectedWidget?.type === 'heading'
         ? 'Heading'
         : selectedWidget?.type === 'text'
@@ -1186,7 +1236,7 @@ export function BuilderPage() {
           : selectedWidget?.type === 'text_input'
             ? 'Text Input'
             : selectedWidget?.type === 'button'
-              ? 'Button'
+              ? 'Inline Shell'
               : 'Component';
   const selectedWidgetLayerLabel = selectedWidget?.type === 'panel' || selectedWidget?.type === 'shadcn_login_card'
     ? 'Card'
@@ -1195,6 +1245,37 @@ export function BuilderPage() {
     || selectedWidget?.props?.sourceTemplateId === 'card_shadcn_login'
     ? 'shadcn/ui'
     : '';
+  const inspectorMeta = useMemo(() => {
+    if (inspectorMode === 'theme') {
+      return {
+        title: 'Theme Inspector',
+      };
+    }
+    if (inspectorMode === 'account') {
+      return {
+        title: 'Account Inspector',
+      };
+    }
+    if (inspectorMode === 'relation') {
+      return {
+        title: 'Relation Inspector',
+      };
+    }
+    if (inspectorMode === 'page') {
+      return {
+        title: 'Shell Inspector',
+      };
+    }
+    if (inspectorMode === 'widget') {
+      return {
+        title: selectedWidgetInspectorLabel,
+      };
+    }
+
+    return {
+      title: 'Project Inspector',
+    };
+  }, [inspectorMode, selectedWidgetInspectorLabel]);
   const widgetInspectorFooter = selectedWidget ? (
     <div className="pt-4 mt-1 border-t border-hr-border">
       {editSurfaceMode === 'kits' ? (
@@ -1251,7 +1332,7 @@ export function BuilderPage() {
               <button
                 onClick={() => setEditorMode('edit')}
                 className={cn(
-                  'px-3 py-1.5 rounded-md text-sm transition-colors',
+                  'builder-toolbar-control rounded-md px-3 text-sm transition-colors',
                   editorMode === 'edit'
                     ? 'bg-hr-primary text-white shadow-sm'
                     : 'text-hr-muted hover:text-hr-text',
@@ -1262,7 +1343,7 @@ export function BuilderPage() {
               <button
                 onClick={() => setEditorMode('preview')}
                 className={cn(
-                  'px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-1.5',
+                  'builder-toolbar-control rounded-md px-3 text-sm transition-colors flex items-center gap-1.5',
                   editorMode === 'preview'
                     ? 'bg-hr-primary text-white shadow-sm'
                     : 'text-hr-muted hover:text-hr-text',
@@ -1279,7 +1360,7 @@ export function BuilderPage() {
               type="button"
               onClick={handleSaveDraft}
               disabled={cloudActionsLocked || isVersionControlBusy || !hasActiveProject}
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-hr-border bg-hr-bg px-3 text-xs font-semibold text-hr-text transition-colors hover:border-hr-primary hover:text-hr-primary disabled:cursor-not-allowed disabled:opacity-50"
+              className="builder-toolbar-control builder-toolbar-pill-control inline-flex gap-1.5 rounded-full border border-hr-border bg-hr-bg text-xs font-semibold text-hr-text transition-colors hover:border-hr-primary hover:text-hr-primary disabled:cursor-not-allowed disabled:opacity-50"
               title="Create a new saved version"
               aria-label="Save current draft as a new version"
             >
@@ -1291,7 +1372,7 @@ export function BuilderPage() {
                 type="button"
                 onClick={() => setIsVersionMenuOpen((open) => !open)}
                 disabled={cloudActionsLocked || isVersionControlBusy || !hasActiveProject || versionOptions.length === 0}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-hr-border bg-hr-bg px-3 text-xs font-semibold text-hr-text transition-colors hover:border-hr-primary hover:text-hr-primary disabled:cursor-not-allowed disabled:opacity-50"
+                className="builder-toolbar-control builder-toolbar-pill-control inline-flex gap-1.5 rounded-full border border-hr-border bg-hr-bg text-xs font-semibold text-hr-text transition-colors hover:border-hr-primary hover:text-hr-primary disabled:cursor-not-allowed disabled:opacity-50"
                 title={activeVersionOption ? `Open version history · ${activeVersionOption.shortLabel}` : 'No saved versions yet'}
                 aria-label="Project versions"
               >
@@ -1325,7 +1406,7 @@ export function BuilderPage() {
             <button
               type="button"
               onClick={() => setShellTheme(shellTheme === 'dark' ? 'light' : 'dark')}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-hr-border bg-hr-bg text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary"
+              className="builder-toolbar-control builder-toolbar-icon-control inline-flex rounded-full border border-hr-border bg-hr-bg text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary"
               title={shellTheme === 'dark' ? 'Switch platform shell to light mode' : 'Switch platform shell to dark mode'}
               aria-label={shellTheme === 'dark' ? 'Switch platform shell to light mode' : 'Switch platform shell to dark mode'}
             >
@@ -1333,7 +1414,7 @@ export function BuilderPage() {
             </button>
             <button
               type="button"
-              className="inline-flex h-9 items-center justify-center gap-1 rounded-full border border-hr-border bg-hr-bg px-3 text-xs font-semibold text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary"
+              className="builder-toolbar-control builder-toolbar-pill-control inline-flex gap-1 rounded-full border border-hr-border bg-hr-bg text-xs font-semibold text-hr-muted transition-colors hover:border-hr-primary hover:text-hr-primary"
               title="English interface placeholder"
               aria-label="English interface placeholder"
             >
@@ -1343,7 +1424,7 @@ export function BuilderPage() {
             <button
               type="button"
               onClick={openAccountInspector}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-hr-border bg-hr-bg px-2 text-hr-text transition-colors hover:border-hr-primary"
+              className="builder-toolbar-control inline-flex gap-2 rounded-full border border-hr-border bg-hr-bg px-2 text-hr-text transition-colors hover:border-hr-primary"
               title={`${accountLabel} · open account inspector`}
               aria-label="Open account panel"
             >
@@ -1399,7 +1480,11 @@ export function BuilderPage() {
         sections={visibleAssetSections}
         canCreateOverlay={canCreateOverlay}
         canApplyProjectBlueprint={canApplyProjectBlueprint}
+        favoriteControlAssetIdSet={favoriteControlAssetIdSet}
+        showFavoriteControlsOnly={showFavoriteControlsOnly}
         onAssetDragStart={handleAssetDragStart}
+        onToggleFavoriteControlAsset={handleToggleFavoriteControlAsset}
+        onToggleFavoriteControlsOnly={() => setShowFavoriteControlsOnly((current) => !current)}
       />
 
       {/* Center Canvas */}
@@ -1413,8 +1498,6 @@ export function BuilderPage() {
           <CanvasSurfaceHeader
             mode={editSurfaceMode}
             selectedPage={selectedPage}
-            pageNodeCount={pageRootLayout.length}
-            kitMasterCount={kitStudioRootLayout.length}
             kitMasterOptions={kitStudioMasterOptions}
             selectedKitStudioId={selectedKitStudioId}
             onChangeMode={setEditSurfaceMode}
@@ -1616,7 +1699,6 @@ export function BuilderPage() {
       {/* Right Inspector Panel */}
       <InspectorPanelShell
         title={inspectorMeta.title}
-        badge={inspectorMeta.badge}
         quickMode={inspectorQuickMode}
         onOpenProject={openProjectInspector}
         onOpenTheme={openThemeInspector}
@@ -1774,6 +1856,7 @@ export function BuilderPage() {
                 sourceOptions={sourceOptions}
                 selectedBindings={selectedBindings}
                 selectedActions={selectedActions}
+                selectedSlotShellSlotId={activeSelectedSlotShellSlotId}
                 selectedWidgetLayerLabel={selectedWidgetLayerLabel}
                 selectedWidgetInspectorLabel={selectedWidgetInspectorLabel}
                 selectedWidgetSourceBadge={selectedWidgetSourceBadge}

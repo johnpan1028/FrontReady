@@ -30,6 +30,7 @@ import {
   MoreHorizontal,
   MoreVertical,
   Phone,
+  Play,
   Plus,
   RefreshCw,
   Save,
@@ -46,9 +47,9 @@ import {
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
-export type IconName = 'X' | 'Minimize2' | 'Maximize2' | 'ChevronDown' | 'ChevronUp' | 'ChevronRight' | 'ChevronLeft' | 'Settings' | 'Trash2' | 'Plus' | 'Minus' | 'RefreshCw' | 'Edit' | 'Save' | 'Search' | 'Bell' | 'Info' | 'AlertTriangle' | 'Check' | 'Menu' | 'MoreHorizontal' | 'MoreVertical' | 'Download' | 'Upload' | 'Copy' | 'ExternalLink' | 'Eye' | 'EyeOff' | 'Lock' | 'Unlock' | 'Star' | 'Heart' | 'Home' | 'User' | 'Users' | 'Mail' | 'Phone' | 'Link' | 'Filter' | 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown';
+export type IconName = 'X' | 'Minimize2' | 'Maximize2' | 'ChevronDown' | 'ChevronUp' | 'ChevronRight' | 'ChevronLeft' | 'Settings' | 'Trash2' | 'Plus' | 'Minus' | 'RefreshCw' | 'Edit' | 'Save' | 'Search' | 'Bell' | 'Info' | 'AlertTriangle' | 'Check' | 'Menu' | 'MoreHorizontal' | 'MoreVertical' | 'Download' | 'Upload' | 'Copy' | 'ExternalLink' | 'Eye' | 'EyeOff' | 'Lock' | 'Unlock' | 'Star' | 'Heart' | 'Home' | 'User' | 'Users' | 'Mail' | 'Phone' | 'Link' | 'Filter' | 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown' | 'Play';
 
-export const ICON_LIST: IconName[] = ['X', 'Minimize2', 'Maximize2', 'ChevronDown', 'ChevronUp', 'ChevronRight', 'ChevronLeft', 'Settings', 'Trash2', 'Plus', 'Minus', 'RefreshCw', 'Edit', 'Save', 'Search', 'Bell', 'Info', 'AlertTriangle', 'Check', 'Menu', 'MoreHorizontal', 'MoreVertical', 'Download', 'Upload', 'Copy', 'ExternalLink', 'Eye', 'EyeOff', 'Lock', 'Unlock', 'Star', 'Heart', 'Home', 'User', 'Users', 'Mail', 'Phone', 'Link', 'Filter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+export const ICON_LIST: IconName[] = ['X', 'Minimize2', 'Maximize2', 'ChevronDown', 'ChevronUp', 'ChevronRight', 'ChevronLeft', 'Settings', 'Trash2', 'Plus', 'Minus', 'RefreshCw', 'Edit', 'Save', 'Search', 'Bell', 'Info', 'AlertTriangle', 'Check', 'Menu', 'MoreHorizontal', 'MoreVertical', 'Download', 'Upload', 'Copy', 'ExternalLink', 'Eye', 'EyeOff', 'Lock', 'Unlock', 'Star', 'Heart', 'Home', 'User', 'Users', 'Mail', 'Phone', 'Link', 'Filter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Play'];
 
 export interface IconButtonProps {
   icon?: IconName;
@@ -107,6 +108,7 @@ const iconMap: Record<IconName, LucideIcon> = {
   Users,
   Mail,
   Phone,
+  Play,
   Link: LinkIcon,
   Filter,
   ArrowLeft,
@@ -115,8 +117,31 @@ const iconMap: Record<IconName, LucideIcon> = {
   ArrowDown,
 };
 
+export const resolveIconComponent = (icon?: IconName): LucideIcon | null => {
+  if (!icon) return null;
+  return iconMap[icon] ?? null;
+};
+
+export function IconGlyph({
+  icon = 'X',
+  size = 18,
+  strokeWidth = 2,
+  className,
+}: {
+  icon?: IconName;
+  size?: number;
+  strokeWidth?: number;
+  className?: string;
+}) {
+  const IconComponent = resolveIconComponent(icon);
+
+  return IconComponent
+    ? <IconComponent size={size} strokeWidth={strokeWidth} className={className} />
+    : <span className={cn('text-xs', className)}>{icon}</span>;
+}
+
 export function IconButton({ icon = 'X', size = 'md', variant = 'ghost', disabled = false, tooltip }: IconButtonProps) {
-  const IconComponent = iconMap[icon];
+  const IconComponent = resolveIconComponent(icon);
 
   return (
     <button

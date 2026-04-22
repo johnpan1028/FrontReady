@@ -7,6 +7,7 @@ import { cn } from '../utils/cn';
 import { getWidgetCornerStyle, getWidgetFrameStyle } from '../runtime/frameStyle';
 import { createWidgetId } from '../core/projectDocument';
 import { doesWidgetFollowParentWidth, getDefaultWidgetMinSize, getDefaultWidgetSize, isContainerWidget, type WidgetType } from './widgetConfig';
+import { getSlotShellAuthoringLayoutSpan, getSlotShellLayoutSpan } from './slotShell';
 
 interface WidgetWrapperProps {
   id: string;
@@ -32,6 +33,14 @@ const BORDERABLE_CONTROL_TYPES = new Set<WidgetType>([
   'select',
   'checkbox',
   'radio',
+  'image',
+  'badge',
+  'checkbox_item',
+  'media_summary_card',
+  'media_list_item',
+  'setting_row',
+  'choice_chip_group',
+  'empty_state_card',
 ]);
 const ROOT_RESIZE_PREVIEW_BORDER_WIDTH = 2;
 
@@ -454,7 +463,11 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
   const isSelected = useBuilderStore((state) => (
     scope === 'kit' ? state.selectedKitStudioId === id : state.selectedId === id
   ));
+  const selectedSlotShellSlotId = useBuilderStore((state) => (
+    scope === 'kit' ? state.selectedKitStudioSlotShellSlotId : state.selectedSlotShellSlotId
+  ));
   const selectWidget = useBuilderStore((state) => state.selectWidget);
+  const selectSlotShellSlot = useBuilderStore((state) => state.selectSlotShellSlot);
   const draggedType = useBuilderStore((state) => state.draggedType);
   const setDraggedType = useBuilderStore((state) => state.setDraggedType);
   const scopedWidgets = useBuilderStore((state) => (scope === 'kit' ? state.kitStudioWidgets : state.widgets));
@@ -499,12 +512,33 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
   const widgetCornerStyle = getWidgetCornerStyle(effectiveWidgetProps, widgetType);
   const canAcceptChildDrop = widgetType ? isContainerWidget(widgetType) : false;
   const isBoardManagedKitNode = isRootKitWidget && (canAcceptChildDrop || publishedMasterName.length > 0);
-  const canResizeOnKitBoard = isRootKitWidget && (widgetType === 'panel' || !canAcceptChildDrop);
+  const canResizeOnKitBoard = isRootKitWidget && widgetType !== 'slot_shell' && (widgetType === 'panel' || !canAcceptChildDrop);
   const showSmartMoveHandle = scope === 'kit' && (!isRootKitWidget || !isBoardManagedKitNode);
+  const smartMoveHandlePositionClassName = widgetType === 'slot_shell'
+    ? 'top-1/2 -left-7 -translate-y-1/2'
+    : 'top-1 left-1';
   const childLayout = scopedLayouts[id] ?? [];
   const targetLayoutItem = scopedLayouts[widgetParentId]?.find((item) => item.i === id);
   const targetMaxCols = Math.max(1, Number(targetLayoutItem?.w ?? 12));
   const nextChildY = childLayout.reduce((maxY, item) => Math.max(maxY, Number(item.y ?? 0) + Number(item.h ?? 1)), 0);
+
+  useEffect(() => {
+    if (!widget || widget.type !== 'slot_shell') return;
+    const desiredLayout = scope === 'kit' && widgetParentId === 'root'
+      ? getSlotShellAuthoringLayoutSpan(widget.props)
+      : getSlotShellLayoutSpan(widget.props);
+
+    if (
+      targetLayoutItem?.w === desiredLayout.w
+      && targetLayoutItem?.h === desiredLayout.h
+      && targetLayoutItem?.minW === desiredLayout.minW
+      && targetLayoutItem?.minH === desiredLayout.minH
+    ) {
+      return;
+    }
+
+    updateLayoutItem(id, widgetParentId, desiredLayout, scope);
+  }, [id, scope, targetLayoutItem?.h, targetLayoutItem?.minH, targetLayoutItem?.minW, targetLayoutItem?.w, updateLayoutItem, widget, widgetParentId]);
 
   const getNestedDropLayoutItem = (
     itemId: string,
@@ -1186,7 +1220,8 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
         {showSmartMoveHandle && (
           <div
             className={cn(
-              "external-move-handle absolute top-1 left-1 z-20 p-1 rounded bg-hr-panel/80 border border-hr-border text-hr-muted cursor-grab active:cursor-grabbing",
+              "external-move-handle absolute z-20 p-1 rounded bg-hr-panel/80 border border-hr-border text-hr-muted cursor-grab active:cursor-grabbing",
+              smartMoveHandlePositionClassName,
               shouldHideMoveHandle
                 ? 'pointer-events-none opacity-0'
                 : (isSelected ? "opacity-100" : showControlsOnHover ? "opacity-0 group-hover:opacity-100" : "opacity-0")
@@ -1266,7 +1301,15 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
             title={widgetType === 'panel' ? 'Resize card' : 'Resize control'}
           />
         ) : null}
-        <Component id={widget.id} {...effectiveWidgetProps} />
+        <Component
+          id={widget.id}
+          {...effectiveWidgetProps}
+          {...(widgetType === 'slot_shell' ? {
+            interactive: true,
+            selectedSlotId: isSelected ? selectedSlotShellSlotId : null,
+            onSelectSlot: (slotId: string) => selectSlotShellSlot(id, slotId, scope),
+          } : {})}
+        />
       </div>
     </div>
   );

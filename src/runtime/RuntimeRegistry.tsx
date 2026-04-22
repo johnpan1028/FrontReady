@@ -10,6 +10,17 @@ import { TextInput } from '../components/atoms/TextInput';
 import { CalendarWidget } from '../components/community/CalendarWidget';
 import { TrendChartWidget } from '../components/community/TrendChartWidget';
 import { ShadcnLoginCardWidget } from '../components/community/ShadcnLoginCardWidget';
+import {
+  BadgeWidget,
+  CheckboxItemWidget,
+  ChoiceChipGroupWidget,
+  EmptyStateCardWidget,
+  ImageWidget,
+  MediaListItemWidget,
+  MediaSummaryCardWidget,
+  SettingRowWidget,
+} from '../components/patterns/PatternWidgets';
+import { IconPrimitiveWidget, InlineShellWidget, SlotShellWidget } from '../components/patterns/SlotShellWidgets';
 import { cn } from '../utils/cn';
 import {
   getTypographyJustifyClass,
@@ -262,18 +273,39 @@ export const RuntimeWidgetRegistry: Record<WidgetType, FC<RuntimeComponentProps>
       />
     );
   },
+  slot_shell: ({ node: _node, runActions: _runActions, ...props }) => {
+    const typographyStyle = getWidgetTypographyStyle('slot_shell', props);
+    return <SlotShellWidget {...props} style={typographyStyle} />;
+  },
+  icon: ({ node: _node, runActions: _runActions, ...props }) => {
+    const typographyStyle = getWidgetTypographyStyle('icon', props);
+    const textAlign = typeof typographyStyle.textAlign === 'string' ? typographyStyle.textAlign : 'center';
+    return (
+      <IconPrimitiveWidget
+        {...props}
+        style={typographyStyle}
+        justifyContentClass={getButtonJustifyClass(textAlign)}
+      />
+    );
+  },
+  image: ({ node: _node, runActions: _runActions, ...props }) => <ImageWidget {...props} />,
+  badge: ({ node: _node, runActions: _runActions, ...props }) => <BadgeWidget {...props} />,
+  checkbox_item: ({ node: _node, runActions: _runActions, ...props }) => <CheckboxItemWidget {...props} />,
+  media_summary_card: ({ node: _node, runActions: _runActions, ...props }) => <MediaSummaryCardWidget {...props} />,
+  media_list_item: ({ node: _node, runActions: _runActions, ...props }) => <MediaListItemWidget {...props} />,
+  setting_row: ({ node: _node, runActions, ...props }) => <SettingRowWidget {...props} onAction={runActions} />,
+  choice_chip_group: ({ node: _node, runActions: _runActions, ...props }) => <ChoiceChipGroupWidget {...props} />,
+  empty_state_card: ({ node: _node, runActions, ...props }) => <EmptyStateCardWidget {...props} onAction={runActions} />,
   button: ({ runActions, ...props }) => {
     const typographyStyle = getWidgetTypographyStyle('button', props);
     const textAlign = typeof typographyStyle.textAlign === 'string' ? typographyStyle.textAlign : 'center';
     return (
-      <Button
-        variant={props.variant}
-        className={cn('h-full w-full', getButtonJustifyClass(textAlign))}
-        style={typographyStyle}
+      <InlineShellWidget
+        {...props}
+        textStyle={typographyStyle}
+        justifyContentClass={getButtonJustifyClass(textAlign)}
         onClick={runActions}
-      >
-        <span>{props.text}</span>
-      </Button>
+      />
     );
   },
   icon_button: ({ node: _node, runActions, ...props }) => (

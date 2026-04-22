@@ -11,22 +11,26 @@ npm run verify:kit-inspector
 默认验证地址：
 
 ```bash
-http://127.0.0.1:3002/
+http://127.0.0.1:3000/
 ```
 
 如需临时指定地址：
 
 ```bash
-KIT_STUDIO_VERIFY_URL=http://127.0.0.1:3002/ npm run verify:kit-inspector
+KIT_STUDIO_VERIFY_URL=http://127.0.0.1:3000/ npm run verify:kit-inspector
 ```
 
 ## 当前覆盖
 
-- 打开 `3002`
+- 打开 `3000`
 - 禁用浏览器缓存
 - 进入 `Kit Studio`
-- 从左侧栏拖入 `Card Shell`
-- 确认右侧属性栏进入 `Card Shell` 配置态
+- 确认左侧 `Controls` 核心资产已收敛为 `Slot Shell`
+- 从左侧栏拖入 `Slot Shell`
+- 确认右侧属性栏进入 `Slot Shell` 配置态
+- 验证 `Line Mode -> Multiple Lines -> Add Row` 可生成多行结构
+- 验证 `Shape -> Round` 会自动收敛回单行结构，并禁用 `Multiple Lines`
+- 验证改 `Cols` 后，二次拖动的根画布预览宽度与本体同步
 - 确认右侧栏不显示内部元数据：
   - `Component ID`
   - `Component Type`
@@ -56,6 +60,12 @@ KIT_STUDIO_VERIFY_URL=http://127.0.0.1:3002/ npm run verify:kit-inspector
 
 ```bash
 temp/kit-studio-inspector-verify.png
+```
+
+以及根画布预览截图：
+
+```bash
+temp/kit-studio-root-preview-width-verify.png
 ```
 
 失败时以命令退出码阻断继续回报。

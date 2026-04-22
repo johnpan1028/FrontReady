@@ -156,6 +156,7 @@ export const getTypographyDefaultsForWidget = (
         textDecoration: 'none',
       };
     case 'button':
+    case 'slot_shell':
       return {
         fontFamily: 'theme',
         fontSize: '14px',

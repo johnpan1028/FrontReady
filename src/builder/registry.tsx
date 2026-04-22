@@ -11,6 +11,17 @@ import { CalendarWidget } from '../components/community/CalendarWidget';
 import { TrendChartWidget } from '../components/community/TrendChartWidget';
 import { ShadcnLoginCardWidget } from '../components/community/ShadcnLoginCardWidget';
 import {
+  BadgeWidget,
+  CheckboxItemWidget,
+  ChoiceChipGroupWidget,
+  EmptyStateCardWidget,
+  ImageWidget,
+  MediaListItemWidget,
+  MediaSummaryCardWidget,
+  SettingRowWidget,
+} from '../components/patterns/PatternWidgets';
+import { IconPrimitiveWidget, InlineShellWidget, SlotShellWidget } from '../components/patterns/SlotShellWidgets';
+import {
   getTypographyJustifyClass,
   getWidgetTypographyStyle,
   scaleTypographyStyle,
@@ -250,19 +261,40 @@ export const WidgetRegistry: Record<string, React.FC<any>> = {
       />
     );
   },
+  slot_shell: (props) => {
+    const typographyStyle = getWidgetTypographyStyle('slot_shell', props);
+    return <SlotShellWidget {...props} style={typographyStyle} />;
+  },
+  icon: (props) => {
+    const typographyStyle = getWidgetTypographyStyle('icon', props);
+    const textAlign = typeof typographyStyle.textAlign === 'string' ? typographyStyle.textAlign : 'center';
+    return (
+      <IconPrimitiveWidget
+        {...props}
+        style={typographyStyle}
+        justifyContentClass={getButtonJustifyClass(textAlign)}
+      />
+    );
+  },
+  image: (props) => <ImageWidget {...props} />,
+  badge: (props) => <BadgeWidget {...props} />,
+  checkbox_item: (props) => <CheckboxItemWidget {...props} />,
+  media_summary_card: (props) => <MediaSummaryCardWidget {...props} />,
+  media_list_item: (props) => <MediaListItemWidget {...props} />,
+  setting_row: (props) => <SettingRowWidget {...props} />,
+  choice_chip_group: (props) => <ChoiceChipGroupWidget {...props} />,
+  empty_state_card: (props) => <EmptyStateCardWidget {...props} />,
 
   // ── ACTIONS ─────────────────────────────────────────────────────────
   button: (props) => {
     const typographyStyle = getWidgetTypographyStyle('button', props);
     const textAlign = typeof typographyStyle.textAlign === 'string' ? typographyStyle.textAlign : 'center';
     return (
-      <Button
-        variant={props.variant}
-        className={cn('h-full w-full', getButtonJustifyClass(textAlign))}
-        style={typographyStyle}
-      >
-        <span>{props.text}</span>
-      </Button>
+      <InlineShellWidget
+        {...props}
+        textStyle={typographyStyle}
+        justifyContentClass={getButtonJustifyClass(textAlign)}
+      />
     );
   },
   icon_button: (props) => (

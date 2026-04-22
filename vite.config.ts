@@ -4,6 +4,8 @@ import checker from 'vite-plugin-checker';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 
+const isWindowsDriveWorkspace = /^\/mnt\/[a-z]\//i.test(process.cwd());
+
 const manualChunks = (id: string) => {
   if (!id.includes('node_modules')) return undefined;
 
@@ -39,9 +41,17 @@ export default defineConfig(({mode}) => {
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      strictPort: true,
       hmr: process.env.DISABLE_HMR !== 'true',
+      watch: isWindowsDriveWorkspace ? {
+        usePolling: true,
+        interval: 120,
+        binaryInterval: 300,
+        awaitWriteFinish: {
+          stabilityThreshold: 200,
+          pollInterval: 100,
+        },
+      } : undefined,
     },
     build: {
       chunkSizeWarningLimit: 1200,

@@ -14,6 +14,7 @@ import {
   inspectorTextareaClassName,
 } from './InspectorPrimitives';
 import { ActionsPanel, BindingsPanel } from '../ProtocolPanels';
+import { SlotShellSlotSection, SlotShellStructureSection } from './SlotShellInspectorSections';
 
 export function WidgetInspectorPanel({
   selectedWidget,
@@ -23,6 +24,7 @@ export function WidgetInspectorPanel({
   sourceOptions,
   selectedBindings,
   selectedActions,
+  selectedSlotShellSlotId,
   selectedWidgetLayerLabel,
   selectedWidgetInspectorLabel,
   selectedWidgetSourceBadge,
@@ -43,6 +45,7 @@ export function WidgetInspectorPanel({
   sourceOptions: Array<{ value: string; label: string }>;
   selectedBindings: DataBinding[];
   selectedActions: NodeAction[];
+  selectedSlotShellSlotId: string | null;
   selectedWidgetLayerLabel: string;
   selectedWidgetInspectorLabel: string;
   selectedWidgetSourceBadge: string;
@@ -152,25 +155,34 @@ export function WidgetInspectorPanel({
     </InspectorSection>
   );
 
+  if (selectedWidget.type === 'slot_shell') {
+    return (
+      <div className="builder-inspector-body">
+        {selectedSlotShellSlotId ? (
+          <SlotShellSlotSection
+            props={selectedWidget.props}
+            selectedSlotId={selectedSlotShellSlotId}
+            sourceOptions={sourceOptions}
+            pages={pages}
+            currentPageId={selectedPage?.id ?? null}
+            onUpdateProps={updateSelectedWidgetProps}
+            onCreateTargetPage={handleCreateActionTargetPage}
+          />
+        ) : (
+          <SlotShellStructureSection
+            props={selectedWidget.props}
+            selectedSlotId={selectedSlotShellSlotId}
+            onUpdateProps={updateSelectedWidgetProps}
+          />
+        )}
+
+        {widgetInspectorFooter ? <div className="pt-2">{widgetInspectorFooter}</div> : null}
+      </div>
+    );
+  }
+
   return (
     <div className="builder-inspector-body">
-      <InspectorSection
-        title={selectedWidgetLayerLabel}
-        collapsible={false}
-        sideSlot={selectedWidgetSourceBadge ? (
-          <span className="builder-inspector-chip">{selectedWidgetSourceBadge}</span>
-        ) : null}
-      >
-        <div className="flex flex-col gap-1">
-          <div className="flex flex-col gap-1">
-            <div className="text-sm font-semibold text-hr-text">{selectedWidgetInspectorLabel}</div>
-            {selectedWidgetSourceName ? (
-              <div className="text-xs text-hr-muted">{selectedWidgetSourceName}</div>
-            ) : null}
-          </div>
-        </div>
-      </InspectorSection>
-
       {showDefinitionInspector ? (
         <StudioDefinitionInspector
           definition={selectedWidgetDefinition}
