@@ -38,6 +38,7 @@ const DEFAULT_CONTROL_LAYOUT_PROPS = {
 const DEFAULT_CONTROL_FRAME_PROPS = {
   ...DEFAULT_CONTROL_LAYOUT_PROPS,
   borderStyle: 'parent',
+  linkCornerPresets: false,
 };
 
 export const DEFAULT_WIDGET_PROPS: Record<WidgetType, Record<string, unknown>> = {
@@ -126,6 +127,7 @@ export const DEFAULT_WIDGET_PROPS: Record<WidgetType, Record<string, unknown>> =
     linkVerticalPadding: true,
     gap: 16,
     scrollable: true,
+    linkCornerPresets: false,
   },
   canvas: {},
 };

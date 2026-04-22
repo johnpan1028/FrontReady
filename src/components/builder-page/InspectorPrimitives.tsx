@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { Children, useState, type ReactNode } from 'react';
 import { cn } from '../../utils/cn';
 
 export const inspectorInputClassName = 'builder-inspector-input w-full';
@@ -84,22 +84,27 @@ export function InspectorSection({
   title,
   badge,
   sideSlot,
+  rightSlot,
   defaultOpen = true,
   collapsible = true,
   className,
   bodyClassName,
+  hideEmptyBody = false,
   children,
 }: {
   title: string;
   badge?: string;
   sideSlot?: ReactNode;
+  rightSlot?: ReactNode;
   defaultOpen?: boolean;
   collapsible?: boolean;
   className?: string;
   bodyClassName?: string;
+  hideEmptyBody?: boolean;
   children: ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const shouldRenderBody = (!collapsible || isOpen) && (!hideEmptyBody || Children.count(children) > 0);
 
   return (
     <section className={cn('builder-inspector-section', className)}>
@@ -114,13 +119,15 @@ export function InspectorSection({
             {badge ? <span className="builder-inspector-chip">{badge}</span> : null}
             {sideSlot}
           </div>
-          <ChevronDown
-            size={14}
-            className={cn(
-              'text-hr-muted transition-transform duration-150',
-              isOpen ? 'rotate-0' : '-rotate-90',
-            )}
-          />
+          {rightSlot ?? (
+            <ChevronDown
+              size={14}
+              className={cn(
+                'text-hr-muted transition-transform duration-150',
+                isOpen ? 'rotate-0' : '-rotate-90',
+              )}
+            />
+          )}
         </button>
       ) : (
         <div className="builder-inspector-section-static">
@@ -129,10 +136,11 @@ export function InspectorSection({
             {badge ? <span className="builder-inspector-chip">{badge}</span> : null}
             {sideSlot}
           </div>
+          {rightSlot}
         </div>
       )}
 
-      {(!collapsible || isOpen) ? (
+      {shouldRenderBody ? (
         <div className={cn('builder-inspector-section-body', bodyClassName)}>
           {children}
         </div>
@@ -197,6 +205,12 @@ export function InspectorToggleField({
 }) {
   return (
     <label className="builder-inspector-toggle">
+      <span className="builder-inspector-toggle-copy">
+        <span className="builder-inspector-toggle-title">{label}</span>
+        {description ? (
+          <span className="builder-inspector-toggle-description">{description}</span>
+        ) : null}
+      </span>
       <input
         type="checkbox"
         className="builder-inspector-checkbox"
@@ -204,12 +218,6 @@ export function InspectorToggleField({
         disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
       />
-      <span className="builder-inspector-toggle-copy">
-        <span className="builder-inspector-toggle-title">{label}</span>
-        {description ? (
-          <span className="builder-inspector-toggle-description">{description}</span>
-        ) : null}
-      </span>
     </label>
   );
 }

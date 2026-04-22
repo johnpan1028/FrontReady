@@ -4,6 +4,9 @@
 
 - `docs/kit-contract-v1.md`
 - `docs/component-procurement-v1.md`
+- `docs/component-layer-foundation-v1.md`
+- `docs/p2-pattern-catalog-v1.md`
+- `docs/inspector-group-architecture-v1.md`
 - `docs/theme-system.md`
 - `docs/export-constitution-v1.md`
 

@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   InspectorField as InspectorFieldRow,
   InspectorNumberInput,
@@ -31,6 +31,27 @@ const INLINE_FOLLOW_FIELD_IDS = new Set([
   'children-follow-border',
 ]);
 
+type CornerPreset = 'square' | 'r1' | 'r2' | 'r3';
+type CornerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+const CORNER_PRESETS: Array<{ value: CornerPreset; label: string }> = [
+  { value: 'square', label: 'Square' },
+  { value: 'r1', label: 'R1' },
+  { value: 'r2', label: 'R2' },
+  { value: 'r3', label: 'R3' },
+];
+
+const CORNER_FIELDS: Array<{
+  id: string;
+  label: string;
+  position: CornerPosition;
+}> = [
+  { id: 'corner-top-left', label: 'Top Left', position: 'top-left' },
+  { id: 'corner-top-right', label: 'Top Right', position: 'top-right' },
+  { id: 'corner-bottom-left', label: 'Bottom Left', position: 'bottom-left' },
+  { id: 'corner-bottom-right', label: 'Bottom Right', position: 'bottom-right' },
+];
+
 type StudioDefinitionInspectorProps = {
   definition: StudioWidgetDefinition;
   value: {
@@ -45,10 +66,69 @@ type StudioDefinitionInspectorProps = {
   onUpdateLayout: (updates: Partial<Pick<LegacyLayoutItem, 'x' | 'y' | 'w' | 'h' | 'minW' | 'minH'>>) => void;
   onUpdateAutoOccupyRow?: (checked: boolean) => void;
   renderBeforeSection?: (section: InspectorSectionDefinition) => ReactNode;
+  externalSections?: Array<{
+    id: string;
+    groupId: string;
+    priority?: number;
+    node: ReactNode;
+  }>;
+};
+
+type InspectorGroupId = 'shell' | 'content' | 'layout' | 'appearance' | 'data' | 'logic';
+
+type InspectorGroupItem = {
+  id: string;
+  groupId: InspectorGroupId;
+  priority: number;
+  node: ReactNode;
+};
+
+const resolveSectionGroupId = (
+  definition: StudioWidgetDefinition,
+  section: InspectorSectionDefinition,
+): InspectorGroupId => {
+  const explicitGroupId = typeof section.meta?.groupId === 'string'
+    ? section.meta.groupId as InspectorGroupId
+    : null;
+
+  if (explicitGroupId) return explicitGroupId;
+
+  const isShellCard = definition.base.type === 'panel';
+
+  if (isShellCard && (section.id === 'header' || section.id === 'footer' || section.id === 'overflow')) {
+    return 'shell';
+  }
+
+  if (section.id === 'layout' || section.id === 'spacing' || section.id === 'size') {
+    return 'layout';
+  }
+
+  if (
+    section.id === 'typography'
+    || section.id === 'frame'
+    || section.id === 'corner'
+    || section.id === 'style'
+  ) {
+    return 'appearance';
+  }
+
+  if (section.id === 'bindings' || section.id === 'data') {
+    return 'data';
+  }
+
+  if (section.id === 'actions' || section.id === 'ai-handoff' || section.id === 'pixel-constraints') {
+    return 'logic';
+  }
+
+  return isShellCard ? 'shell' : 'content';
 };
 
 const normalizeBorderStyleValue = (value: unknown, fallback: 'solid' | 'transparent' | 'parent' = 'solid') => (
   value === 'transparent' || value === 'parent' || value === 'solid' ? value : fallback
+);
+
+const normalizeCornerPresetValue = (value: unknown): CornerPreset => (
+  value === 'square' || value === 'r1' || value === 'r3' ? value : 'r2'
 );
 
 const getPathValue = (
@@ -65,6 +145,15 @@ const getPathValue = (
 
     if (propKey === 'borderStyle' || propKey === 'controlBorderStyle') {
       return normalizeBorderStyleValue(propValue);
+    }
+
+    if (
+      propKey === 'cornerTopLeftPreset'
+      || propKey === 'cornerTopRightPreset'
+      || propKey === 'cornerBottomLeftPreset'
+      || propKey === 'cornerBottomRightPreset'
+    ) {
+      return normalizeCornerPresetValue(propValue);
     }
 
     if (propKey === 'childrenFollowFont' || propKey === 'childrenFollowBorder') {
@@ -178,6 +267,7 @@ function InspectorInlineToggle({
 
   return (
     <label className="builder-inspector-inline-toggle">
+      <span>{field.label}</span>
       <input
         type="checkbox"
         className="builder-inspector-inline-checkbox"
@@ -188,8 +278,230 @@ function InspectorInlineToggle({
           { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow },
         )}
       />
-      <span>{field.label}</span>
     </label>
+  );
+}
+
+function InspectorSectionCheckbox({
+  field,
+  value,
+  layoutItem,
+  onUpdateProps,
+  onUpdateLayout,
+  onUpdateAutoOccupyRow,
+}: {
+  field: InspectorFieldDefinition;
+} & Omit<StudioDefinitionInspectorProps, 'definition'>) {
+  const currentValue = getPathValue(value, layoutItem, field.path);
+
+  return (
+    <label
+      className="builder-inspector-section-checkbox"
+      title={field.label}
+      aria-label={field.label}
+    >
+      <input
+        type="checkbox"
+        className="builder-inspector-inline-checkbox"
+        checked={Boolean(currentValue)}
+        onChange={(event) => updateFieldValue(
+          field,
+          event.target.checked,
+          { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow },
+        )}
+      />
+    </label>
+  );
+}
+
+const getCornerGlyphPath = (position: CornerPosition, preset: CornerPreset) => {
+  const radius = preset === 'square' ? 0 : preset === 'r1' ? 4 : preset === 'r2' ? 7 : 10;
+
+  if (radius === 0) {
+    if (position === 'top-left') return 'M19 5H5V19';
+    if (position === 'top-right') return 'M5 5H19V19';
+    if (position === 'bottom-left') return 'M19 19H5V5';
+    return 'M5 19H19V5';
+  }
+
+  if (position === 'top-left') return `M19 5H${5 + radius}A${radius} ${radius} 0 0 0 5 ${5 + radius}V19`;
+  if (position === 'top-right') return `M5 5H${19 - radius}A${radius} ${radius} 0 0 1 19 ${5 + radius}V19`;
+  if (position === 'bottom-left') return `M19 19H${5 + radius}A${radius} ${radius} 0 0 1 5 ${19 - radius}V5`;
+  return `M5 19H${19 - radius}A${radius} ${radius} 0 0 0 19 ${19 - radius}V5`;
+};
+
+function CornerGlyph({
+  position,
+  preset,
+}: {
+  position: CornerPosition;
+  preset: CornerPreset;
+}) {
+  return (
+    <svg
+      className="builder-inspector-corner-glyph"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path d={getCornerGlyphPath(position, preset)} />
+    </svg>
+  );
+}
+
+function InspectorCornerSection({
+  section,
+  value,
+  layoutItem,
+  onUpdateProps,
+  onUpdateLayout,
+  onUpdateAutoOccupyRow,
+}: {
+  section: InspectorSectionDefinition;
+} & Omit<StudioDefinitionInspectorProps, 'definition'>) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [activeCornerId, setActiveCornerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeCornerId) return undefined;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (rootRef.current?.contains(event.target as Node)) return;
+      setActiveCornerId(null);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [activeCornerId]);
+
+  const linkCornersField = section.fields.find((field) => field.id === 'link-corners') ?? null;
+  const linkCornersEnabled = linkCornersField
+    ? Boolean(getPathValue(value, layoutItem, linkCornersField.path))
+    : false;
+  const cornerItems = CORNER_FIELDS
+    .map((config) => ({
+      ...config,
+      field: section.fields.find((field) => field.id === config.id),
+    }))
+    .filter((item): item is typeof item & { field: InspectorFieldDefinition } => Boolean(item.field));
+
+  const activeCorner = cornerItems.find((item) => item.id === activeCornerId) ?? null;
+  const primaryCornerPreset = cornerItems[0]
+    ? normalizeCornerPresetValue(getPathValue(value, layoutItem, cornerItems[0].field.path))
+    : 'r2';
+
+  const updateCornerPreset = (field: InspectorFieldDefinition, preset: CornerPreset) => {
+    if (linkCornersEnabled) {
+      onUpdateProps({
+        cornerTopLeftPreset: preset,
+        cornerTopRightPreset: preset,
+        cornerBottomLeftPreset: preset,
+        cornerBottomRightPreset: preset,
+      });
+      return;
+    }
+
+    updateFieldValue(
+      field,
+      preset,
+      { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow },
+    );
+  };
+
+  const updateLinkCorners = (checked: boolean) => {
+    if (!linkCornersField) return;
+
+    if (checked) {
+      onUpdateProps({
+        linkCornerPresets: true,
+        cornerTopLeftPreset: primaryCornerPreset,
+        cornerTopRightPreset: primaryCornerPreset,
+        cornerBottomLeftPreset: primaryCornerPreset,
+        cornerBottomRightPreset: primaryCornerPreset,
+      });
+      return;
+    }
+
+    updateFieldValue(
+      linkCornersField,
+      false,
+      { onUpdateProps, onUpdateLayout, onUpdateAutoOccupyRow },
+    );
+  };
+
+  return (
+    <InspectorSectionBlock
+      title={section.title}
+      defaultOpen={section.defaultOpen !== false}
+      collapsible={section.collapsible !== false}
+      className="builder-inspector-section-corner"
+      bodyClassName="builder-inspector-corner-body"
+    >
+      <div ref={rootRef} className="builder-inspector-corner-grid">
+        {linkCornersField ? (
+          <label className="builder-inspector-corner-link">
+            <span>{linkCornersField.label}</span>
+            <input
+              type="checkbox"
+              className="builder-inspector-inline-checkbox"
+              checked={linkCornersEnabled}
+              onChange={(event) => updateLinkCorners(event.target.checked)}
+            />
+          </label>
+        ) : null}
+
+        {cornerItems.map((item) => {
+          const currentPreset = normalizeCornerPresetValue(getPathValue(value, layoutItem, item.field.path));
+          const isActive = activeCornerId === item.id;
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={cn(
+                'builder-inspector-corner-trigger',
+                isActive && 'is-active',
+              )}
+              title={item.label}
+              aria-label={item.label}
+              aria-pressed={isActive}
+              onClick={() => setActiveCornerId((current) => (current === item.id ? null : item.id))}
+            >
+              <CornerGlyph position={item.position} preset={currentPreset} />
+            </button>
+          );
+        })}
+
+        {activeCorner ? (
+          <div className="builder-inspector-corner-popover" role="listbox" aria-label={`${activeCorner.label} corner`}>
+            {CORNER_PRESETS.map((preset) => {
+              const currentPreset = normalizeCornerPresetValue(getPathValue(value, layoutItem, activeCorner.field.path));
+              const isActive = currentPreset === preset.value;
+
+              return (
+                <button
+                  key={preset.value}
+                  type="button"
+                  className={cn(
+                    'builder-inspector-corner-option',
+                    isActive && 'is-active',
+                  )}
+                  role="option"
+                  aria-selected={isActive}
+                  title={preset.label}
+                  onClick={() => {
+                    updateCornerPreset(activeCorner.field, preset.value);
+                    setActiveCornerId(null);
+                  }}
+                >
+                  <CornerGlyph position={activeCorner.position} preset={preset.value} />
+                  <span>{preset.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    </InspectorSectionBlock>
   );
 }
 
@@ -344,13 +656,42 @@ function InspectorSection({
 }: {
   section: InspectorSectionDefinition;
 } & Omit<StudioDefinitionInspectorProps, 'definition'>) {
+  const visibleFields = section.fields;
+  const toggleFieldId = typeof section.meta?.toggleFieldId === 'string'
+    ? section.meta.toggleFieldId
+    : null;
+  const sectionToggleField = toggleFieldId
+    ? visibleFields.find((field) => field.id === toggleFieldId)
+    : null;
+  const isCompactToggleSection = section.id === 'header' || section.id === 'footer' || section.id === 'overflow';
+  const sectionToggleChecked = sectionToggleField
+    ? Boolean(getPathValue(props.value, props.layoutItem, sectionToggleField.path))
+    : true;
+  const sectionSideSlot = sectionToggleField && !isCompactToggleSection
+    ? <InspectorInlineToggle field={sectionToggleField} {...props} />
+    : undefined;
+  const sectionRightSlot = sectionToggleField && isCompactToggleSection
+    ? <InspectorSectionCheckbox field={sectionToggleField} {...props} />
+    : undefined;
+  const contentFields = sectionToggleField
+    ? visibleFields.filter((field) => field.id !== sectionToggleField.id)
+    : visibleFields;
   const isTypographySection = section.id === 'typography';
   const isSpacingSection = section.id === 'spacing' && props.value.type === 'panel';
   const isPanelWidget = props.value.type === 'panel';
   const isPanelBorderSection = isPanelWidget && section.id === 'frame';
 
+  if (section.id === 'corner') {
+    return (
+      <InspectorCornerSection
+        section={section}
+        {...props}
+      />
+    );
+  }
+
   if (isSpacingSection) {
-    const getField = (fieldId: string) => section.fields.find((field) => field.id === fieldId);
+    const getField = (fieldId: string) => contentFields.find((field) => field.id === fieldId);
     const renderField = (fieldId: string) => {
       const field = getField(fieldId);
       if (!field) return null;
@@ -361,29 +702,62 @@ function InspectorSection({
       <InspectorSectionBlock
         title={section.title}
         defaultOpen={section.defaultOpen !== false}
+        collapsible={section.collapsible !== false}
+        sideSlot={sectionSideSlot}
         className="builder-inspector-section-spacing"
       >
-        <div className="builder-inspector-spacing-grid">
-          <div className="builder-inspector-spacing-card">
-            {renderField('padding-horizontal-link')}
-            {renderField('padding-left')}
-            {renderField('padding-right')}
-          </div>
+        {sectionToggleChecked ? (
+          <>
+            <div className="builder-inspector-spacing-grid">
+              <div className="builder-inspector-spacing-card">
+                {renderField('padding-horizontal-link')}
+                {renderField('padding-left')}
+                {renderField('padding-right')}
+              </div>
 
-          <div className="builder-inspector-spacing-card">
-            {renderField('padding-vertical-link')}
-            {renderField('padding-top')}
-            {renderField('padding-bottom')}
-          </div>
-        </div>
+              <div className="builder-inspector-spacing-card">
+                {renderField('padding-vertical-link')}
+                {renderField('padding-top')}
+                {renderField('padding-bottom')}
+              </div>
+            </div>
 
-        {renderField('gap')}
+            {renderField('gap')}
+          </>
+        ) : null}
+      </InspectorSectionBlock>
+    );
+  }
+
+  if (sectionToggleField) {
+    return (
+      <InspectorSectionBlock
+        title={section.title}
+        defaultOpen={section.defaultOpen !== false}
+        collapsible={section.collapsible !== false}
+        sideSlot={sectionSideSlot}
+        rightSlot={sectionRightSlot}
+        className={isCompactToggleSection ? 'builder-inspector-section-compact-toggle' : undefined}
+        bodyClassName={isCompactToggleSection ? 'builder-inspector-section-compact-toggle-body' : undefined}
+        hideEmptyBody={isCompactToggleSection}
+      >
+        {sectionToggleChecked && contentFields.length > 0 ? (
+          <div className="flex flex-col gap-3">
+            {contentFields.map((field) => (
+              <InspectorField
+                key={field.id}
+                field={field}
+                {...props}
+              />
+            ))}
+          </div>
+        ) : null}
       </InspectorSectionBlock>
     );
   }
 
   if (isPanelBorderSection) {
-    const followField = section.fields.find((field) => field.id === 'children-follow-border');
+    const followField = contentFields.find((field) => field.id === 'children-follow-border');
 
     return (
       <InspectorSectionBlock
@@ -391,7 +765,7 @@ function InspectorSection({
         defaultOpen={section.defaultOpen !== false}
       >
         <div className="flex flex-col gap-3">
-          {section.fields
+          {contentFields
             .filter((field) => field.id !== 'children-follow-border')
             .map((field) => (
               <InspectorField
@@ -415,11 +789,11 @@ function InspectorSection({
       className={isTypographySection ? 'builder-inspector-section-typography' : undefined}
     >
       <div className={isTypographySection ? 'builder-inspector-typography-grid' : 'flex flex-col gap-3'}>
-        {section.fields.map((field) => {
+        {contentFields.map((field) => {
           if (INLINE_FOLLOW_FIELD_IDS.has(field.id)) return null;
 
           const followField = isTypographySection && isPanelWidget && field.id === 'font-family'
-            ? section.fields.find((sectionField) => sectionField.id === 'children-follow-font')
+            ? contentFields.find((sectionField) => sectionField.id === 'children-follow-font')
             : null;
           const fieldNode = (
             <InspectorField
@@ -449,19 +823,72 @@ function InspectorSection({
 export function StudioDefinitionInspector({
   definition,
   renderBeforeSection,
+  externalSections = [],
   ...props
 }: StudioDefinitionInspectorProps) {
   const sections = [...definition.inspector]
     .filter((section) => section.fields.length > 0)
     .sort((left, right) => left.priority - right.priority);
 
+  const groupItems: InspectorGroupItem[] = sections.flatMap((section) => {
+    const groupId = resolveSectionGroupId(definition, section);
+    const beforeNode = renderBeforeSection?.(section);
+    const items: InspectorGroupItem[] = [];
+
+    if (beforeNode) {
+      items.push({
+        id: `before-${section.id}`,
+        groupId,
+        priority: section.priority - 0.1,
+        node: beforeNode,
+      });
+    }
+
+    items.push({
+      id: section.id,
+      groupId,
+      priority: section.priority,
+      node: <InspectorSection section={section} {...props} />,
+    });
+
+    return items;
+  });
+
+  externalSections.forEach((section) => {
+    groupItems.push({
+      id: section.id,
+      groupId: section.groupId as InspectorGroupId,
+      priority: section.priority ?? 100,
+      node: section.node,
+    });
+  });
+
+  const orderedGroups = definition.propertyGroups
+    .filter((group) => group.id === 'shell' || group.id === 'content' || group.id === 'layout' || group.id === 'appearance' || group.id === 'data' || group.id === 'logic')
+    .map((group) => ({
+      ...group,
+      groupId: group.id as InspectorGroupId,
+    }))
+    .filter((group) => groupItems.some((item) => item.groupId === group.groupId));
+
   return (
     <>
-      {sections.map((section) => (
-        <Fragment key={section.id}>
-          {renderBeforeSection?.(section)}
-          <InspectorSection section={section} {...props} />
-        </Fragment>
+      {orderedGroups.map((group) => (
+        <section key={group.groupId} className="builder-inspector-group">
+          <div className="builder-inspector-group-header">
+            <span className="builder-inspector-group-title">{group.title}</span>
+          </div>
+          <div className="builder-inspector-group-body">
+            {groupItems
+              .filter((item) => item.groupId === group.groupId)
+              .sort((left, right) => left.priority - right.priority)
+              .map((item) => (
+                <Fragment key={item.id}>
+                  {item.node}
+                </Fragment>
+              ))}
+          </div>
+        </section>
       ))}
     </>
   );

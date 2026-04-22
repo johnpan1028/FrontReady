@@ -120,6 +120,7 @@ export function IconButton({ icon = 'X', size = 'md', variant = 'ghost', disable
 
   return (
     <button
+      data-select-surface="button"
       disabled={disabled}
       title={tooltip}
       className={cn(

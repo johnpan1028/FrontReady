@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { getCompactor, GridLayout, ResponsiveGridLayout } from 'react-grid-layout';
 import { PROJECT_GRID_BREAKPOINTS, PROJECT_GRID_COLS } from '../builder/responsive';
 import { useBuilderWorkspaceScope } from '../builder/workspaceScope';
@@ -85,7 +86,14 @@ type KitRootDragSessionEventDetail =
 
 type KitRootResizePreviewEventDetail =
   | { action: 'clear'; widgetId?: string }
-  | { action: 'update'; widgetId: string; cols: number; rows: number };
+  | { action: 'update'; widgetId: string; cols: number; rows: number; widthPx?: number; heightPx?: number };
+
+type RootResizePreviewState = {
+  cols: number;
+  rows: number;
+  widthPx?: number;
+  heightPx?: number;
+};
 
 const toGridNumber = (value: unknown, fallback = 0) => {
   const next = Number(value);
@@ -212,6 +220,47 @@ const normalizeCompactLayout = (
       const widget = widgets[item.i];
       return clampCompactItem(item, getCompactItemBehavior(widget), parentCols);
     });
+};
+
+const normalizeCompactResizePreviewLayout = (
+  liveLayout: readonly GridLayoutItem[],
+  frozenLayout: readonly GridLayoutItem[],
+  widgets: Record<string, { type?: WidgetType; props?: Record<string, unknown> }>,
+  parentCols: number,
+  enabled: boolean,
+) => {
+  if (!enabled) {
+    return liveLayout.map((item) => ({ ...normalizeGridItem(item) }));
+  }
+
+  const liveLayoutById = new Map(
+    liveLayout.map((item) => [item.i, normalizeGridItem(item)] as const),
+  );
+  const frozenLayoutById = new Map(
+    frozenLayout.map((item) => [item.i, normalizeGridItem(item)] as const),
+  );
+  const orderedIds = Array.from(new Set([
+    ...frozenLayout.map((item) => item.i),
+    ...liveLayout.map((item) => item.i),
+  ]));
+
+  return orderedIds.flatMap((itemId) => {
+    const widget = widgets[itemId];
+    const behavior = getCompactItemBehavior(widget);
+    const frozenItem = frozenLayoutById.get(itemId);
+    const liveItem = liveLayoutById.get(itemId);
+    const sourceItem = behavior.followParentWidth
+      ? (liveItem ?? frozenItem)
+      : (frozenItem ?? liveItem);
+
+    if (!sourceItem) return [];
+
+    if (behavior.followParentWidth) {
+      return [clampCompactItem(sourceItem, behavior, parentCols)];
+    }
+
+    return [normalizeGridItem(sourceItem)];
+  });
 };
 
 const getCompactLayoutMaxRowSpan = (layout: readonly GridLayoutItem[]) => {
@@ -630,7 +679,9 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
   const [nativeDropHost, setNativeDropHost] = useState<HTMLDivElement | null>(null);
   const [compactCanvasViewportHeight, setCompactCanvasViewportHeight] = useState(0);
   const [crossCardPreviewItem, setCrossCardPreviewItem] = useState<GridLayoutItem | null>(null);
-  const [rootResizePreviewCols, setRootResizePreviewCols] = useState<number | null>(null);
+  const [rootResizePreview, setRootResizePreview] = useState<RootResizePreviewState | null>(null);
+  const layoutSnapshotRef = useRef<GridLayoutItem[]>([]);
+  const resizePreviewLayoutRef = useRef<GridLayoutItem[] | null>(null);
   const rootPreviewActiveRef = useRef(false);
   const activeRootDragSessionRef = useRef<Extract<KitRootDragSessionEventDetail, { action: 'start' }> | null>(null);
   const externalDragProxyRef = useRef<HTMLElement | null>(null);
@@ -646,9 +697,13 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
   const safeGap = toSpacingNumber(gap, gapFallback);
 
   const layout = scopedLayouts[id] || [];
+  useEffect(() => {
+    layoutSnapshotRef.current = (layout as GridLayoutItem[]).map((item) => normalizeGridItem(item));
+  }, [layout]);
   const containerWidget = scopedWidgets[id];
   const containerLayout = containerWidget ? (scopedLayouts[containerWidget.parentId] || []) : [];
   const containerLayoutItem = containerLayout.find((item) => item.i === id);
+  const rootResizePreviewCols = rootResizePreview?.cols ?? null;
   const parentCols = Math.max(1, Number(rootResizePreviewCols ?? containerLayoutItem?.w ?? 8));
   const compactGridRulesEnabled = compact && layoutMode === 'grid';
   const compactCanvasShouldFillHeight = compactGridRulesEnabled && scrollable !== false;
@@ -661,12 +716,32 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
   );
   const activeCompactCols = Math.max(compactCols, requiredCompactContentCols);
   const activeCompactContentCols = getCompactContentCols(activeCompactCols);
+  const isRootResizePreviewActive = compactGridRulesEnabled && rootResizePreviewCols != null;
+  const livePreviewCanvasWidth = isRootResizePreviewActive && nativeDropHost
+    ? Math.floor(nativeDropHost.clientWidth || nativeDropHost.getBoundingClientRect().width)
+    : 0;
+  const previewCanvasWidth = livePreviewCanvasWidth > 0
+    ? livePreviewCanvasWidth
+    : (isRootResizePreviewActive ? Math.round(Number(rootResizePreview?.widthPx ?? 0)) : 0);
   const gridLayout = useMemo(
-    () => normalizeCompactLayout(layout as GridLayoutItem[], scopedWidgets, activeCompactCols, compactGridRulesEnabled),
-    [activeCompactCols, compactGridRulesEnabled, layout, scopedWidgets],
+    () => (
+      isRootResizePreviewActive && resizePreviewLayoutRef.current
+        ? normalizeCompactResizePreviewLayout(
+          layout as GridLayoutItem[],
+          resizePreviewLayoutRef.current,
+          scopedWidgets,
+          activeCompactCols,
+          compactGridRulesEnabled,
+        )
+        : normalizeCompactLayout(layout as GridLayoutItem[], scopedWidgets, activeCompactCols, compactGridRulesEnabled)
+    ),
+    [activeCompactCols, compactGridRulesEnabled, isRootResizePreviewActive, layout, scopedWidgets],
   );
   const responsiveLayouts = useMemo(() => ({ lg: gridLayout }), [gridLayout]);
-  const canvasWidth = Math.max(width, 120);
+  const canvasWidth = Math.max(
+    isRootResizePreviewActive && previewCanvasWidth > 0 ? previewCanvasWidth : width,
+    120,
+  );
   const gridCanvasWidth = Math.max(120, canvasWidth - safePaddingLeft - safePaddingRight);
   const requiredPanelWrapCols = useMemo(
     () => resolveRequiredPanelWrapCols({
@@ -778,7 +853,10 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
 
   useEffect(() => {
     if (scope !== 'kit' || !compactGridRulesEnabled) {
-      setRootResizePreviewCols(null);
+      resizePreviewLayoutRef.current = null;
+      flushSync(() => {
+        setRootResizePreview(null);
+      });
       return;
     }
 
@@ -788,17 +866,44 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
 
       if (detail.action === 'clear') {
         if (!detail.widgetId || detail.widgetId === id) {
-          setRootResizePreviewCols(null);
+          resizePreviewLayoutRef.current = null;
+          flushSync(() => {
+            setRootResizePreview(null);
+          });
         }
         return;
       }
 
       if (detail.widgetId !== id) return;
 
+      if (!resizePreviewLayoutRef.current) {
+        resizePreviewLayoutRef.current = layoutSnapshotRef.current.map((item) => ({ ...item }));
+      }
+
       const nextCols = Math.max(1, Math.round(Number(detail.cols || 1)));
-      setRootResizePreviewCols((currentCols) => (
-        currentCols === nextCols ? currentCols : nextCols
-      ));
+      const nextRows = Math.max(1, Math.round(Number(detail.rows || 1)));
+      const nextWidthPx = detail.widthPx != null ? Math.max(1, Math.round(Number(detail.widthPx))) : undefined;
+      const nextHeightPx = detail.heightPx != null ? Math.max(1, Math.round(Number(detail.heightPx))) : undefined;
+      flushSync(() => {
+        setRootResizePreview((current) => {
+          if (
+            current
+            && current.cols === nextCols
+            && current.rows === nextRows
+            && current.widthPx === nextWidthPx
+            && current.heightPx === nextHeightPx
+          ) {
+            return current;
+          }
+
+          return {
+            cols: nextCols,
+            rows: nextRows,
+            widthPx: nextWidthPx,
+            heightPx: nextHeightPx,
+          };
+        });
+      });
     };
 
     window.addEventListener(KIT_ROOT_RESIZE_PREVIEW_EVENT, handleRootResizePreview as EventListener);
@@ -923,12 +1028,13 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
 
   useEffect(() => {
     if (!compactGridRulesEnabled) return;
+    if (rootResizePreviewCols != null) return;
     if (requiredPanelWrapCols != null && parentCols < requiredPanelWrapCols) return;
     const normalizedSource = normalizeCompactLayout(layout as GridLayoutItem[], scopedWidgets, parentCols, true);
     const currentSource = (layout as GridLayoutItem[]).map((item) => normalizeGridItem(item));
     if (areGridLayoutsEqual(currentSource, normalizedSource)) return;
     updateLayout(id, normalizedSource as any[], scope);
-  }, [compactGridRulesEnabled, id, layout, parentCols, requiredPanelWrapCols, scopedWidgets, scope, updateLayout]);
+  }, [compactGridRulesEnabled, id, layout, parentCols, requiredPanelWrapCols, rootResizePreviewCols, scopedWidgets, scope, updateLayout]);
 
   useEffect(() => {
     if (!mounted || !compactGridRulesEnabled) return;

@@ -22,6 +22,17 @@ type ControlDefinitionInput = z.input<typeof ControlDefinitionSchema>;
 type CardDefinitionInput = z.input<typeof CardDefinitionSchema>;
 type InspectorFieldInput = z.input<typeof InspectorFieldDefinitionSchema>;
 
+const propertyGroup = (
+  id: string,
+  title: string,
+  description?: string,
+) => ({
+  id,
+  title,
+  description,
+  fields: [],
+});
+
 const textField = (
   id: string,
   label: string,
@@ -110,6 +121,13 @@ const BORDER_STYLE_OPTIONS = [
   { label: 'Solid', value: 'solid' },
   { label: 'None', value: 'transparent' },
   { label: 'Parent controlled', value: 'parent' },
+] as const;
+
+const CORNER_PRESET_OPTIONS = [
+  { label: 'Square', value: 'square' },
+  { label: 'R1', value: 'r1' },
+  { label: 'R2', value: 'r2' },
+  { label: 'R3', value: 'r3' },
 ] as const;
 
 const runtime = (rendererKey: string, sourceComponent: string, importPath: string, flags = {}) => ({
@@ -204,6 +222,36 @@ const cardFrameSection = {
   ],
 };
 
+const controlCornerSection = {
+  id: 'corner',
+  title: 'Corner',
+  scope: ['control' as const],
+  priority: 26,
+  defaultOpen: false,
+  fields: [
+    switchField('link-corners', 'Sync corners', 'props.linkCornerPresets'),
+    selectField('corner-top-left', 'Top Left', 'props.cornerTopLeftPreset', [...CORNER_PRESET_OPTIONS]),
+    selectField('corner-top-right', 'Top Right', 'props.cornerTopRightPreset', [...CORNER_PRESET_OPTIONS]),
+    selectField('corner-bottom-left', 'Bottom Left', 'props.cornerBottomLeftPreset', [...CORNER_PRESET_OPTIONS]),
+    selectField('corner-bottom-right', 'Bottom Right', 'props.cornerBottomRightPreset', [...CORNER_PRESET_OPTIONS]),
+  ],
+};
+
+const cardCornerSection = {
+  id: 'corner',
+  title: 'Corner',
+  scope: ['card' as const],
+  priority: 26,
+  defaultOpen: false,
+  fields: [
+    switchField('link-corners', 'Sync corners', 'props.linkCornerPresets'),
+    selectField('corner-top-left', 'Top Left', 'props.cornerTopLeftPreset', [...CORNER_PRESET_OPTIONS]),
+    selectField('corner-top-right', 'Top Right', 'props.cornerTopRightPreset', [...CORNER_PRESET_OPTIONS]),
+    selectField('corner-bottom-left', 'Bottom Left', 'props.cornerBottomLeftPreset', [...CORNER_PRESET_OPTIONS]),
+    selectField('corner-bottom-right', 'Bottom Right', 'props.cornerBottomRightPreset', [...CORNER_PRESET_OPTIONS]),
+  ],
+};
+
 const handoffSection = {
   id: 'ai-handoff',
   title: 'Handoff',
@@ -216,12 +264,38 @@ const handoffSection = {
   ],
 };
 
+const CONTROL_PROPERTY_GROUPS = [
+  propertyGroup('content', 'Content', 'Business content and visible copy.'),
+  propertyGroup('layout', 'Layout', 'Sizing, spacing, and parent-layout constraints.'),
+  propertyGroup('appearance', 'Appearance', 'Typography, border, corner, and surface styling.'),
+  propertyGroup('data', 'Data', 'Bindings, state keys, and field mapping.'),
+  propertyGroup('logic', 'Logic', 'Actions, handoff, and runtime constraints.'),
+];
+
+const SHELL_PROPERTY_GROUPS = [
+  propertyGroup('shell', 'Shell', 'Header, footer, overflow, and shell-level rules.'),
+  propertyGroup('layout', 'Layout', 'Size, padding, gap, and auto-height behavior.'),
+  propertyGroup('appearance', 'Appearance', 'Typography, border, corner, and child-follow styling.'),
+  propertyGroup('data', 'Data', 'Slot policy and shell-level data contract.'),
+  propertyGroup('logic', 'Logic', 'Actions, handoff, and shell constraints.'),
+];
+
 const control = (definition: ControlDefinitionInput): ControlDefinition => (
-  ControlDefinitionSchema.parse(definition)
+  ControlDefinitionSchema.parse({
+    ...definition,
+    propertyGroups: definition.propertyGroups?.length ? definition.propertyGroups : CONTROL_PROPERTY_GROUPS,
+  })
 );
 
 const card = (definition: CardDefinitionInput): CardDefinition => (
-  CardDefinitionSchema.parse(definition)
+  CardDefinitionSchema.parse({
+    ...definition,
+    propertyGroups: definition.propertyGroups?.length
+      ? definition.propertyGroups
+      : definition.base?.type === 'panel'
+        ? SHELL_PROPERTY_GROUPS
+        : CONTROL_PROPERTY_GROUPS,
+  })
 );
 
 export const CONTROL_DEFINITIONS = [
@@ -267,6 +341,7 @@ export const CONTROL_DEFINITIONS = [
       },
       typographySection,
       controlFrameSection,
+      controlCornerSection,
       layoutSection,
       handoffSection,
     ],
@@ -310,6 +385,7 @@ export const CONTROL_DEFINITIONS = [
       },
       typographySection,
       controlFrameSection,
+      controlCornerSection,
       layoutSection,
       handoffSection,
     ],
@@ -377,6 +453,7 @@ export const CONTROL_DEFINITIONS = [
       },
       typographySection,
       controlFrameSection,
+      controlCornerSection,
       layoutSection,
       handoffSection,
     ],
@@ -441,6 +518,7 @@ export const CONTROL_DEFINITIONS = [
       },
       typographySection,
       controlFrameSection,
+      controlCornerSection,
       layoutSection,
       handoffSection,
     ],
@@ -492,6 +570,7 @@ export const CONTROL_DEFINITIONS = [
       },
       typographySection,
       controlFrameSection,
+      controlCornerSection,
       layoutSection,
       handoffSection,
     ],
@@ -543,6 +622,7 @@ export const CONTROL_DEFINITIONS = [
       },
       typographySection,
       controlFrameSection,
+      controlCornerSection,
       layoutSection,
       handoffSection,
     ],
@@ -605,6 +685,7 @@ export const CONTROL_DEFINITIONS = [
       },
       typographySection,
       controlFrameSection,
+      controlCornerSection,
       layoutSection,
       handoffSection,
     ],
@@ -667,6 +748,7 @@ export const CONTROL_DEFINITIONS = [
       },
       typographySection,
       controlFrameSection,
+      controlCornerSection,
       layoutSection,
       handoffSection,
     ],
@@ -742,6 +824,7 @@ export const CONTROL_DEFINITIONS = [
         ],
       },
       controlFrameSection,
+      controlCornerSection,
       layoutSection,
       handoffSection,
     ],
@@ -792,6 +875,7 @@ export const CONTROL_DEFINITIONS = [
       },
       typographySection,
       controlFrameSection,
+      controlCornerSection,
       layoutSection,
       handoffSection,
     ],
@@ -850,6 +934,7 @@ export const CONTROL_DEFINITIONS = [
       },
       typographySection,
       controlFrameSection,
+      controlCornerSection,
       layoutSection,
       handoffSection,
     ],
@@ -1062,29 +1147,45 @@ export const CARD_DEFINITIONS = [
     },
     inspector: [
       {
-        id: 'structure',
-        title: 'Structure',
+        id: 'header',
+        title: 'Header',
         scope: ['card'],
         priority: 10,
+        collapsible: false,
+        meta: {
+          toggleFieldId: 'show-header',
+        },
         fields: [
-          textField('title', 'Header Text', 'props.title'),
-          selectField('layout-mode', 'Layout', 'props.layoutMode', [
-            { label: 'Grid', value: 'grid' },
-            { label: 'Flex Row', value: 'flex-row' },
-            { label: 'Flex Column', value: 'flex-col' },
-          ]),
           switchField('show-header', 'Show Header', 'props.showHeader'),
+          textField('title', 'Header Text', 'props.title'),
+        ],
+      },
+      {
+        id: 'footer',
+        title: 'Footer',
+        scope: ['card'],
+        priority: 11,
+        collapsible: false,
+        meta: {
+          toggleFieldId: 'show-footer',
+        },
+        fields: [
           switchField('show-footer', 'Show Footer', 'props.showFooter'),
           textField('footer-text', 'Footer Text', 'props.footerText'),
         ],
       },
       typographySection,
       cardFrameSection,
+      cardCornerSection,
       {
         id: 'overflow',
         title: 'Overflow',
         scope: ['card'],
         priority: 20,
+        collapsible: false,
+        meta: {
+          toggleFieldId: 'scrollbar',
+        },
         fields: [
           switchField('scrollbar', 'Enable Scrollbar', 'props.scrollable', {
             description: 'Off means the card shell grows with its inner content instead of scrolling.',

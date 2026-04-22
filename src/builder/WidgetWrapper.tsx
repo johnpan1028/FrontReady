@@ -4,7 +4,7 @@ import { useBuilderStore } from '../store/builderStore';
 import { WidgetRegistry } from './registry';
 import { Move } from 'lucide-react';
 import { cn } from '../utils/cn';
-import { getWidgetFrameStyle } from '../runtime/frameStyle';
+import { getWidgetCornerStyle, getWidgetFrameStyle } from '../runtime/frameStyle';
 import { createWidgetId } from '../core/projectDocument';
 import { doesWidgetFollowParentWidth, getDefaultWidgetMinSize, getDefaultWidgetSize, isContainerWidget, type WidgetType } from './widgetConfig';
 
@@ -33,6 +33,7 @@ const BORDERABLE_CONTROL_TYPES = new Set<WidgetType>([
   'checkbox',
   'radio',
 ]);
+const ROOT_RESIZE_PREVIEW_BORDER_WIDTH = 2;
 
 type LayoutItemShape = {
   i: string;
@@ -238,7 +239,7 @@ const dispatchKitRootDragSession = (
 
 const dispatchKitRootResizePreview = (
   detail:
-    | { action: 'update'; widgetId: string; cols: number; rows: number }
+    | { action: 'update'; widgetId: string; cols: number; rows: number; widthPx?: number; heightPx?: number }
     | { action: 'clear'; widgetId?: string },
 ) => {
   window.dispatchEvent(new CustomEvent(KIT_ROOT_RESIZE_PREVIEW_EVENT, { detail }));
@@ -447,6 +448,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
   const dragProxyRef = useRef<HTMLElement | null>(null);
   const dragProxyOffsetRef = useRef({ x: 0, y: 0 });
   const rootResizePreviewHostRef = useRef<HTMLElement | null>(null);
+  const childResizePreviewBaseWidthRef = useRef<number | null>(null);
   const scope = useBuilderWorkspaceScope();
   const widget = useBuilderStore((state) => (scope === 'kit' ? state.kitStudioWidgets[id] : state.widgets[id]));
   const isSelected = useBuilderStore((state) => (
@@ -494,6 +496,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
     : '';
 
   const widgetStyle = getWidgetFrameStyle(effectiveWidgetProps);
+  const widgetCornerStyle = getWidgetCornerStyle(effectiveWidgetProps, widgetType);
   const canAcceptChildDrop = widgetType ? isContainerWidget(widgetType) : false;
   const isBoardManagedKitNode = isRootKitWidget && (canAcceptChildDrop || publishedMasterName.length > 0);
   const canResizeOnKitBoard = isRootKitWidget && (widgetType === 'panel' || !canAcceptChildDrop);
@@ -544,6 +547,19 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       previewHost.style.removeProperty('min-height');
     }
     rootResizePreviewHostRef.current = null;
+  }, []);
+
+  const clearChildResizePreviewStyles = useCallback(() => {
+    childResizePreviewBaseWidthRef.current = null;
+
+    const wrapperNode = wrapperRef.current;
+    if (!wrapperNode) return;
+
+    wrapperNode.style.removeProperty('width');
+    wrapperNode.style.removeProperty('min-width');
+    wrapperNode.style.removeProperty('max-width');
+    wrapperNode.style.removeProperty('transform');
+    wrapperNode.style.removeProperty('transform-origin');
   }, []);
 
   const stopRootResize = useCallback(() => {
@@ -612,6 +628,14 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
 
     document.body.style.userSelect = 'none';
     document.body.style.cursor = 'se-resize';
+    dispatchKitRootResizePreview({
+      action: 'update',
+      widgetId: id,
+      cols: baseCols,
+      rows: Math.max(1, Number(targetLayoutItem.h ?? 1)),
+      widthPx: Math.max(1, Math.round(startWidthPx) - ROOT_RESIZE_PREVIEW_BORDER_WIDTH),
+      heightPx: Math.max(1, Math.round(startHeightPx) - ROOT_RESIZE_PREVIEW_BORDER_WIDTH),
+    });
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const session = resizeSessionRef.current;
@@ -664,7 +688,14 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
           previewHostNode.style.height = nextHeightStyle;
           previewHostNode.style.minHeight = nextHeightStyle;
         }
-        dispatchKitRootResizePreview({ action: 'update', widgetId: id, cols: nextCols, rows: nextRows });
+        dispatchKitRootResizePreview({
+          action: 'update',
+          widgetId: id,
+          cols: nextCols,
+          rows: nextRows,
+          widthPx: Math.max(1, Math.round(nextWidthPx) - ROOT_RESIZE_PREVIEW_BORDER_WIDTH),
+          heightPx: Math.max(1, Math.round(nextHeightPx) - ROOT_RESIZE_PREVIEW_BORDER_WIDTH),
+        });
         resizeFrameRef.current = null;
       });
     };
@@ -999,7 +1030,64 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
   useEffect(() => () => {
     stopRootResize();
     clearRootResizePreviewStyles();
-  }, [clearRootResizePreviewStyles, stopRootResize]);
+    clearChildResizePreviewStyles();
+  }, [clearChildResizePreviewStyles, clearRootResizePreviewStyles, stopRootResize]);
+
+  useEffect(() => {
+    const shouldStabilizeChildWidth = (
+      scope === 'kit'
+      && widgetParentId !== 'root'
+      && widgetType != null
+      && !isContainerWidget(widgetType)
+      && !doesWidgetFollowParentWidth(widgetProps)
+    );
+
+    if (!shouldStabilizeChildWidth) {
+      clearChildResizePreviewStyles();
+      return;
+    }
+
+    const handleRootResizePreview = (event: Event) => {
+      const detail = (event as CustomEvent<
+        | { action: 'clear'; widgetId?: string }
+        | { action: 'update'; widgetId: string; cols: number; rows: number; widthPx?: number; heightPx?: number }
+      >).detail;
+      if (!detail) return;
+
+      if (detail.action === 'clear') {
+        if (!detail.widgetId || detail.widgetId === widgetParentId) {
+          clearChildResizePreviewStyles();
+        }
+        return;
+      }
+
+      if (detail.widgetId !== widgetParentId) return;
+
+      const wrapperNode = wrapperRef.current;
+      if (!wrapperNode) return;
+
+      if (childResizePreviewBaseWidthRef.current == null) {
+        const baseWidth = Math.max(1, wrapperNode.getBoundingClientRect().width || wrapperNode.offsetWidth);
+        childResizePreviewBaseWidthRef.current = baseWidth > 0 ? baseWidth : null;
+      }
+
+      const baseWidth = childResizePreviewBaseWidthRef.current;
+      if (!baseWidth || baseWidth <= 0) return;
+
+      const lockedWidth = `${baseWidth}px`;
+      wrapperNode.style.width = lockedWidth;
+      wrapperNode.style.minWidth = lockedWidth;
+      wrapperNode.style.maxWidth = lockedWidth;
+      wrapperNode.style.removeProperty('transform');
+      wrapperNode.style.removeProperty('transform-origin');
+    };
+
+    window.addEventListener(KIT_ROOT_RESIZE_PREVIEW_EVENT, handleRootResizePreview as EventListener);
+    return () => {
+      window.removeEventListener(KIT_ROOT_RESIZE_PREVIEW_EVENT, handleRootResizePreview as EventListener);
+      clearChildResizePreviewStyles();
+    };
+  }, [clearChildResizePreviewStyles, scope, widgetParentId, widgetProps, widgetType]);
 
   useEffect(() => {
     const node = wrapperRef.current;
@@ -1079,6 +1167,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       className={cn(
         'widget-wrapper relative group w-full h-full overflow-visible'
       )}
+      style={widgetCornerStyle}
       onDragOverCapture={(e) => {
         handleLiveReorder(e);
         if (!canAcceptChildDrop) return;

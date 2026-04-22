@@ -36,6 +36,7 @@ export function TextareaInput({
     <div className="flex flex-col gap-1.5 w-full h-full">
       {label && <label className="text-xs font-medium text-hr-text" style={labelTextStyle}>{label}</label>}
       <textarea
+        data-select-surface="field"
         placeholder={placeholder || 'Enter text...'}
         defaultValue={value == null ? defaultValue : undefined}
         value={value == null ? undefined : value}

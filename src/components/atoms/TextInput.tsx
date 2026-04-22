@@ -76,7 +76,18 @@ export function TextInput({
           ['--builder-input-shadow' as any]: isField ? 'var(--theme-field-shadow)' : 'var(--theme-input-shadow)',
           backgroundColor: isField ? 'var(--theme-field-bg)' : 'var(--theme-input-bg)',
           borderColor: isField ? 'var(--theme-field-border)' : 'var(--theme-input-border)',
-          borderRadius: isField ? 'var(--theme-field-radius)' : 'var(--theme-input-radius)',
+          borderTopLeftRadius: isField
+            ? 'calc(var(--theme-field-radius) * var(--builder-corner-top-left-factor, 1))'
+            : 'calc(var(--theme-input-radius) * var(--builder-corner-top-left-factor, 1))',
+          borderTopRightRadius: isField
+            ? 'calc(var(--theme-field-radius) * var(--builder-corner-top-right-factor, 1))'
+            : 'calc(var(--theme-input-radius) * var(--builder-corner-top-right-factor, 1))',
+          borderBottomLeftRadius: isField
+            ? 'calc(var(--theme-field-radius) * var(--builder-corner-bottom-left-factor, 1))'
+            : 'calc(var(--theme-input-radius) * var(--builder-corner-bottom-left-factor, 1))',
+          borderBottomRightRadius: isField
+            ? 'calc(var(--theme-field-radius) * var(--builder-corner-bottom-right-factor, 1))'
+            : 'calc(var(--theme-input-radius) * var(--builder-corner-bottom-right-factor, 1))',
           boxShadow: 'var(--builder-input-shadow)',
           paddingLeft: isField ? 'var(--theme-field-padding-x)' : 'var(--theme-input-padding-x)',
           paddingRight: isField ? 'var(--theme-field-padding-x)' : 'var(--theme-input-padding-x)',

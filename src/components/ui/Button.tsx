@@ -26,7 +26,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           className
         )}
         style={{
-          borderRadius: 'var(--theme-button-radius)',
+          borderTopLeftRadius: 'calc(var(--theme-button-radius) * var(--builder-corner-top-left-factor, 1))',
+          borderTopRightRadius: 'calc(var(--theme-button-radius) * var(--builder-corner-top-right-factor, 1))',
+          borderBottomLeftRadius: 'calc(var(--theme-button-radius) * var(--builder-corner-bottom-left-factor, 1))',
+          borderBottomRightRadius: 'calc(var(--theme-button-radius) * var(--builder-corner-bottom-right-factor, 1))',
           ...style,
         }}
         {...props}

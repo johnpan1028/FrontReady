@@ -45,6 +45,7 @@ export function SelectInput({
       {label && <label className="text-xs font-medium text-hr-text" style={labelTextStyle}>{label}</label>}
       <div className="relative w-full">
         <select
+          data-select-surface="field"
           defaultValue={value == null ? defaultValue : undefined}
           value={value == null ? undefined : value}
           disabled={disabled}

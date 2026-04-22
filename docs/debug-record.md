@@ -238,6 +238,79 @@
 
 ---
 
+### 3. Card Shell 的 Overflow Inspector 交互形态不统一
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-21`
+- 最近更新时间：`2026-04-21`
+- 来源：`Kit Studio` 右侧栏实际操作验证
+
+#### 现象
+
+- `Card Shell` 的 `Overflow` 区块仍沿用普通 section 结构
+- 区块内部显示 `Enable Scrollbar` 勾选和文本行
+- 与 `Header / Footer` 当前采用的单行右侧 checkbox 交互不一致
+
+#### 当前判断
+
+- 这不是 card shell 滚动语义本身的问题
+- 问题在于 Inspector 契约和渲染形态未统一
+- `Overflow` 本质上只有一个布尔开关，应该直接收敛为单行 section，而不是再展开出内部字段
+
+#### 相关文件
+
+- `src/kit/definitions/widgetDefinitions.ts`
+- `src/kit/inspector/StudioDefinitionInspector.tsx`
+- `src/components/builder-page/InspectorPrimitives.tsx`
+
+#### 影响范围
+
+- `Card Shell` Inspector 的一致性
+- 右侧栏视觉紧凑度
+- 后续 shell 级布尔属性的统一设计方式
+
+#### 当前处理决定
+
+- 将 `Overflow` 调整为与 `Header / Footer` 同款的单行 section
+- 右侧 checkbox 直接代表 `Enable Scrollbar`
+- 不再显示内部勾选行与说明文本块
+
+#### 重开条件
+
+满足以下任一条件时重开：
+
+- 需要让 `Overflow` 扩展为多种滚动策略
+- 后续增加横向滚动、滚动条样式或滚动行为细分配置
+- 右侧栏 section 规范再次调整
+
+#### 维修方案
+
+- 给 `overflow` section 增加 `toggleFieldId`
+- 改为非折叠 section，并复用 compact toggle section 的右侧 checkbox 形态
+- 当 section 没有额外内容字段时，不再渲染空 body
+
+#### 修复后回填项
+
+- 根因确认：`Overflow` 仍走普通 toggle section 渲染链，导致单一布尔属性被渲染成“标题 + 内部勾选项”的双层结构
+- 最终采用方案：将 `Overflow` 收敛为单行右侧 checkbox section，直接映射 `props.scrollable`
+- 实际改动文件清单：
+  - `src/kit/definitions/widgetDefinitions.ts`
+  - `src/kit/inspector/StudioDefinitionInspector.tsx`
+- 验证方式 / 回归结果：
+  - 在真实浏览器 `3000` 端口、同一窗口内强制刷新验证
+  - 确认 `Overflow` 区块高度为单行，右侧为 checkbox，且不再渲染内部 body
+  - 截图输出：`/mnt/c/Users/Administrator/AppData/Local/Temp/frontaiready-overflow-inspector.png`
+- 是否需要后续追加清理：暂不需要
+
+#### 更新日志
+
+- `2026-04-21`：发现 `Overflow` 区块仍是旧的展开式 toggle 结构
+- `2026-04-21`：开始修复，统一到 compact toggle section 体系
+- `2026-04-21`：修复完成，并在真实浏览器中确认 `Overflow` 已变为单行 checkbox section
+
+---
+
 ### 3. 根画布控件二次拖入 Card Shell 后高度被放大
 
 - 状态：`resolved`
@@ -3231,7 +3304,7 @@
 
 ### 31. Card Shell 缩放实时体验不够丝滑
 
-- 状态：`deferred`
+- 状态：`resolved`
 - 优先级：`medium`
 - 首次记录时间：`2026-04-21`
 - 最近更新时间：`2026-04-21`
@@ -3264,8 +3337,15 @@
 
 #### 当前处理决定
 
-- 当前先保存可用版本
-- 后续作为专项优化进入，不在保存版本前继续扩大修改
+- 已先冻结当前可用版本，避免继续优化时破坏现有正确链路
+- 冻结版本信息：
+  - 分支：`codex/kit-studio-snapshot-20260420`
+  - 提交：`4db5b5a`
+  - 提交信息：`chore: snapshot current kit studio card shell state`
+- 上一轮“已完成”的结论曾被用户实测推翻，后续确认原因包含 `3000` 服务仍加载旧模块以及非跟随控件只做了 `scaleX` 视觉补偿
+- 本轮已完成补强：非跟随控件在 root resize preview 期间改为直接锁定自身像素宽度，避免随父级 grid item 宽度变化
+- 当前仍只处理 Card Shell 缩放实时体验，不涉及拖拽迁移、Inspector、删除、跨卡预览等无关链路
+- 本轮修复顺序为“尺寸真值收敛 → 非跟随控件稳定 → 跟随控件 padding 实时稳定”
 
 #### 重开条件
 
@@ -3275,24 +3355,220 @@
 
 #### 维修方案
 
-- 当前状态：`待后续确定`
-- 初步优化方向：
-  - 缩放预览期建立单一尺寸真值，避免 DOM width 与 grid cols 互相追逐
-  - 对 root resize preview 做 requestAnimationFrame 节流和最后一帧合并
-  - 非跟随控件在缩放过程中固定使用拖拽开始时的 child layout，不在每一帧重新 compact
-  - 跟随父级控件的宽度计算改为直接使用同一帧的 preview cols 和 preview canvas width，保证右侧 padding 同步
-  - pointer up 后再做一次最终 normalize / compact / store commit
+- 当前状态：`已完成本轮补强修复`
+- 已确认的分阶段方案：
+  - 阶段 0：冻结现状
+    - 保留当前可用版本作为回退基线
+    - 不在基线版本上继续混入新功能
+  - 阶段 1：统一缩放预览真值
+    - 由 `WidgetWrapper` 的 root resize 会话统一持有 preview cols / rows / pixel width / pixel height
+    - `NestedCanvas` 在 preview 期只消费统一 preview 值，不再让 DOM 测量值和 grid cols 双向抢写
+  - 阶段 2：冻结非跟随控件在 resize 期的布局真值
+    - 非跟随控件在卡壳缩放过程中保持原始 `x/y/w/h`
+    - 仅在 pointer up 后再执行 normalize / compact / wrap 修正
+    - 避免 `normalizeCompactLayout` 与 `updateLayout` 在缩放中每帧回写，引发来回抖动
+  - 阶段 3：让跟随父级控件直接吃 preview 期宽度
+    - 跟随父级控件在 resize 期直接使用同一帧 preview cols 对应的内容区宽度
+    - `paddingRight` 继续以真实内容区为基准，不把滚动条与未出现的保留宽度混算进去
+    - 确保跟随控件右侧内边距在拖拉过程中就稳定，而不是 pointer up 后才稳定
+  - 阶段 4：收口与回归
+    - pointer up 后一次性提交最终 `w/h`
+    - 再执行一次最终 normalize / compact / auto-wrap
+    - 用固定 `3000` 端口、同一个浏览器窗口回归：root 缩放、A→B 跨卡、root↔card、影子尺寸一致、自动撑宽、缩放下限、右侧 padding
+- 已执行但仍需补强的部分：
+  - root resize preview 事件从只传 `cols / rows` 扩展为同步传递 `widthPx / heightPx`
+  - `NestedCanvas` 在 resize preview 期使用实时 DOM 宽度 / preview 像素宽度作为内容区计算来源
+  - resize preview 开始时冻结 child layout 快照，非跟随控件在缩放中不再每帧 compact / 回写
+  - preview 事件进入 `NestedCanvas` 后使用同步刷新，减少跟随控件落后一帧的问题
+  - 缩放过程中跳过 child layout normalize 回写，pointer up 后再进入最终 commit / normalize
+- 本轮补强：
+  - 非跟随控件不再用 `scaleX(...)` 做缩放补偿
+  - 在父级 Card Shell root resize preview 期间，`WidgetWrapper` 直接把非跟随控件 wrapper 的 `width / min-width / max-width` 锁定为 resize 开始时的像素宽度
+  - preview clear 时清理宽度锁定，回到正常 grid layout 渲染
+- 涉及文件保持最小范围：
+  - `src/builder/WidgetWrapper.tsx`
+  - `src/components/NestedCanvas.tsx`
+  - `docs/debug-record.md`
+  - `docs/card-shell-resize-optimization-plan.md`
+
+#### 根因确认
+
+- `WidgetWrapper` 原来的 root resize preview 事件只传 `cols / rows`，当像素宽度变化但列数未稳定同步时，`NestedCanvas` 会拿到滞后的内容区宽度
+- `NestedCanvas` 在 root resize preview 期间仍可能触发 `normalizeCompactLayout(...)` 与 `updateLayout(...)`，导致非跟随控件在拖拉过程中被重复 compact / clamp
+- `useContainerWidth` 依赖 `ResizeObserver`，天然会比直接拖拉写入的 DOM 宽度晚一帧；跟随父级控件因此会出现右侧 padding 拖动中不稳定、松手后恢复的现象
+- 上一轮补强验证偏差：一开始 `3000` 端口仍在加载旧版 `WidgetWrapper`，真实源码未进入浏览器；重启同一端口后才确认新模块生效
+- 非跟随控件残余波动根因：只在 wrapper 上做 `scaleX(...)` 补偿，仍会受 grid item 实时宽度、舍入与帧时序影响；直接锁定像素宽度后，浏览器采样宽度波动归零
 
 #### 修复后回填项
 
-- 根因确认
-- 实际改动文件清单
-- 浏览器验证方式 / 回归结果
-- 是否影响已有 `root ↔ card`、`A ↔ B`、右侧 padding、缩放下限链路
+- 实际改动文件清单：
+  - `src/builder/WidgetWrapper.tsx`
+  - `src/components/NestedCanvas.tsx`
+  - `docs/debug-record.md`
+  - `docs/card-shell-resize-optimization-plan.md`
+- 验证方式 / 回归结果：
+  - `npm run lint -- --pretty false`
+  - `npm run build`
+  - 固定 `3000` 端口，使用同一个 Chrome 远程调试窗口做 CDP 浏览器回测
+  - 通过 `window.__builderStore` 种入最小复现场景：`resize-panel` + 两个非跟随按钮 + 一个跟随父级输入框
+  - 真实鼠标事件拖动 Card Shell 右下角缩放柄，采样 5 个 resize 过程点
+  - 回归结果：
+    - `rightGapRange: 0`，跟随父级控件右侧 padding 在拖动中保持稳定
+    - `fixedWidthRange: 0`，非跟随控件在拖动采样期间视觉宽度不再波动
+    - `fixedXRange: 0`，非跟随控件缩放中不再横向抖动 / 被重新 compact
+    - 非跟随控件的 child layout 在缩放前后保持 `x/y/w/h` 不变
+    - pointer up 后 follow 控件按新卡壳宽度提交最终 layout
+- 本轮未改动拖拽迁移、A ↔ B 跨卡、删除入口、Inspector 配置链路
 
 #### 更新日志
 
 - `2026-04-21`：用户反馈完整实现已可用，但 Card Shell 缩放体验仍存在非跟随控件抖动、跟随控件右侧 padding 实时不稳定；先登记并准备保存当前可用版本
+- `2026-04-21`：已先冻结当前可用版本到 `codex/kit-studio-snapshot-20260420` / `4db5b5a`，并把后续优化拆成“统一尺寸真值 → 冻结非跟随布局 → 跟随控件实时 padding 稳定 → 回归验证”四个阶段
+- `2026-04-21`：完成本轮专项修复；preview 事件补齐像素宽度，NestedCanvas 预览期冻结非跟随布局并使用实时宽度，浏览器 CDP 回测确认右侧 padding 与非跟随控件位置稳定
+- `2026-04-21`：用户反馈“这轮优化没实际效果”，重新回到修复中；复盘判断上一轮只验证到位置与部分 padding 稳定，未把未跟随父级控件的视觉宽度彻底锁死，需继续用固定 `3000` 端口和同一浏览器窗口回测
+- `2026-04-21`：确认 `3000` 服务曾加载旧模块，重启同一端口后新代码生效；将非跟随控件的 resize preview 处理从 `scaleX` 改为直接锁定 `width / min-width / max-width`，CDP 真实鼠标回测得到 `fixedWidthRange: 0`、`fixedXRange: 0`、`rightGapRange: 0`
+
+---
+
+### 9. Inspector 勾选项的文本与勾选框顺序不统一
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-21`
+- 最近更新时间：`2026-04-21`
+- 来源：`Kit Studio` 右侧栏实际操作验证
+
+#### 现象
+
+- Inspector 内多个勾选项仍是“左侧勾选框 + 右侧文本”的旧顺序
+- 与当前 `Header / Footer / Overflow` 这类右侧勾选的视觉逻辑不统一
+- 典型位置包括：
+  - `Spacing` 中的 `Horizontal Same / Vertical Same`
+  - `Typography / Border / Size` 中的 `Internal follow / Follow parent`
+
+#### 当前判断
+
+- 这是 inspector 表达层的统一性问题，不涉及属性语义变更
+- 应统一为“文本在左，勾选在右”，减少右侧栏视觉噪音
+
+#### 相关文件
+
+- `src/components/builder-page/InspectorPrimitives.tsx`
+- `src/kit/inspector/StudioDefinitionInspector.tsx`
+- `src/components/builder-page/WidgetInspectorPanel.tsx`
+- `src/index.css`
+
+#### 影响范围
+
+- 右侧栏 checkbox 类字段的视觉一致性
+- `Card Shell` 与普通控件 inspector 的统一设计语言
+
+#### 当前处理决定
+
+- 统一调整块级 checkbox 行和 inline checkbox 的左右顺序
+- 保持功能和字段定义不变，只改呈现顺序与排布
+
+#### 重开条件
+
+满足以下任一条件时重开：
+
+- 后续右侧栏整体规范再次调整
+- 勾选项改造为 switch / segmented 等别的控件形态
+
+#### 维修方案
+
+- 调整 `InspectorToggleField` 结构，让文本块在前、checkbox 在后
+- 调整 inline toggle 结构，让 `Internal follow / Follow parent` 统一为文本左、checkbox 右
+- 用 CSS 保持现有紧凑高度和对齐方式
+
+#### 修复后回填项
+
+- 根因确认：Inspector 中 block toggle 与 inline toggle 仍使用旧 DOM 顺序，导致 checkbox 默认渲染在左侧
+- 最终采用方案：统一改为“copy 在前，checkbox 在后”
+- 实际改动文件清单：
+  - `src/components/builder-page/InspectorPrimitives.tsx`
+  - `src/kit/inspector/StudioDefinitionInspector.tsx`
+  - `src/components/builder-page/WidgetInspectorPanel.tsx`
+  - `src/index.css`
+- 验证方式 / 回归结果：
+  - 固定 `3000` 端口，同一真实浏览器窗口回测
+  - DOM 验证：
+    - `Horizontal Same / Vertical Same` 为 `firstElement=builder-inspector-toggle-copy`、`lastElement=builder-inspector-checkbox`
+    - `Internal follow / Follow parent` 为 `children=[SPAN, INPUT]`
+  - 截图输出：
+    - `/mnt/c/Users/Administrator/AppData/Local/Temp/frontaiready-toggle-panel.png`
+    - `/mnt/c/Users/Administrator/AppData/Local/Temp/frontaiready-toggle-control.png`
+- 是否需要后续追加清理：暂不需要
+
+#### 更新日志
+
+- `2026-04-21`：发现 Inspector 多处 checkbox 顺序仍不统一
+- `2026-04-21`：开始修复 block toggle 与 inline toggle 的左右顺序
+- `2026-04-21`：修复完成，并在真实浏览器中确认 `Card Shell` 与普通控件的勾选项均已变为“文本左、勾选右”
+
+---
+
+### 10. 3000 开发服继续服务旧 CSS 模块
+
+- 状态：`resolved`
+- 优先级：`low`
+- 首次记录时间：`2026-04-22`
+- 最近更新时间：`2026-04-22`
+- 来源：`Kit Studio` 右侧栏大组层级视觉回测
+
+#### 现象
+
+- 已修改 `src/index.css` 后，固定 Chrome 页面刷新仍显示旧右侧栏分组样式
+- 浏览器内 `.builder-inspector-group` 命中规则仍是旧的 `gap: 6px / padding: 8px 0 10px / border-bottom`
+- 同一页面直接 `fetch('/src/index.css')` 也返回旧 CSS 内容
+
+#### 当前判断
+
+- 这是本地 Vite 进程的模块缓存 / 热更新状态异常
+- 当前磁盘文件已经是新版本，但 `3000` 进程继续服务旧 CSS 模块
+- 不属于 Kit Studio inspector 分组架构本身的逻辑问题
+
+#### 相关文件
+
+- `src/index.css`
+- `docs/debug-record.md`
+
+#### 影响范围
+
+- 前端视觉调整后的真实浏览器回测可信度
+- 用户在固定 `3000` 页面看到的右侧栏样式是否与磁盘源码一致
+
+#### 当前处理决定
+
+- 只重启 `3000` 的 Vite 开发服
+- 不新开浏览器窗口，继续复用当前 Chrome 调试页
+- 重启后强制跳转刷新同一页面并重新截图验证
+
+#### 重开条件
+
+- 后续再次出现“磁盘文件已更新，但浏览器和 `/src/index.css` 仍返回旧内容”
+- 同一端口重启后仍不能服务当前源码
+
+#### 维修方案
+
+- 结束旧 `3000` Vite 进程
+- 重新执行 `npm run dev` 绑定 `3000`
+- 在同一 Chrome target 中禁用缓存并跳转到带时间戳参数的 `3000` URL
+
+#### 修复后回填项
+
+- 根因确认：旧 Vite 进程继续返回旧 CSS 模块，导致浏览器刷新和页面内 fetch 均看不到当前磁盘变更
+- 实际改动文件清单：
+  - `docs/debug-record.md`
+- 验证方式 / 回归结果：
+  - 重启 `3000` 后，开发服返回的 `/src/index.css` 已包含 `border-radius: 14px` 与 `margin-top: 10px`
+  - 同一 Chrome 页面回测 `.builder-inspector-group` 计算样式为 `borderRadius: 14px`、`borderTopWidth: 1px`
+  - `window.__builderLastError` 为 `null`
+
+#### 更新日志
+
+- `2026-04-22`：发现当前 `3000` 页面和页面内 fetch 均仍读取旧 CSS
+- `2026-04-22`：重启同一端口 Vite，不新开浏览器窗口，确认新 CSS 已生效并完成截图回测
 
 ---
 

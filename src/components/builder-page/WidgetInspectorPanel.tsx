@@ -72,90 +72,84 @@ export function WidgetInspectorPanel({
   const canFollowParentWidth = selectedWidget.type !== 'panel' && selectedWidget.type !== 'canvas';
   const widthFollowAccessory = canFollowParentWidth ? (
     <label className="builder-inspector-inline-toggle">
+      <span>Follow parent</span>
       <input
         type="checkbox"
         className="builder-inspector-inline-checkbox"
         checked={selectedWidgetFollowParentWidth}
         onChange={(event) => updateSelectedWidgetFollowParentWidth(event.target.checked)}
       />
-      <span>Follow parent</span>
     </label>
   ) : null;
-  const shouldInsertSizingBeforeBorder = Boolean(
-    selectedWidget.type !== 'panel' &&
-    selectedWidgetDefinition?.inspector.some((section) => section.id === 'frame' || section.title === 'Border'),
-  );
-  const sizingInspectorSections = (
-    <>
-      {selectedLayoutItem ? (
-        <InspectorSection title="Size">
-          <div className="grid grid-cols-2 gap-3">
-            <InspectorField label="Cols" labelAccessory={widthFollowAccessory}>
-              <InspectorNumberInput
-                min={1}
-                max={showCardLayoutControls ? selectedCardControlMaxCols : 48}
-                value={selectedLayoutItem.w || 1}
-                disabled={showCardLayoutControls && selectedWidgetFollowParentWidth}
-                onChange={(value) => updateSelectedLayoutItem({ w: value })}
-              />
-            </InspectorField>
+  const sizeInspectorSection = selectedLayoutItem ? (
+    <InspectorSection title="Size">
+      <div className="grid grid-cols-2 gap-3">
+        <InspectorField label="Cols" labelAccessory={widthFollowAccessory}>
+          <InspectorNumberInput
+            min={1}
+            max={showCardLayoutControls ? selectedCardControlMaxCols : 48}
+            value={selectedLayoutItem.w || 1}
+            disabled={showCardLayoutControls && selectedWidgetFollowParentWidth}
+            onChange={(value) => updateSelectedLayoutItem({ w: value })}
+          />
+        </InspectorField>
 
-            <InspectorField label="Rows">
-              <InspectorNumberInput
-                min={1}
-                value={selectedLayoutItem.h || 1}
-                onChange={(value) => updateSelectedLayoutItem({ h: value })}
-              />
-            </InspectorField>
+        <InspectorField label="Rows">
+          <InspectorNumberInput
+            min={1}
+            value={selectedLayoutItem.h || 1}
+            onChange={(value) => updateSelectedLayoutItem({ h: value })}
+          />
+        </InspectorField>
 
-            <InspectorField label="Min Cols">
-              <InspectorNumberInput
-                min={1}
-                max={showCardLayoutControls ? selectedCardControlMaxCols : 48}
-                value={selectedLayoutItem.minW || defaultMinSize.minW}
-                onChange={(value) => updateSelectedLayoutItem({ minW: value })}
-              />
-            </InspectorField>
+        <InspectorField label="Min Cols">
+          <InspectorNumberInput
+            min={1}
+            max={showCardLayoutControls ? selectedCardControlMaxCols : 48}
+            value={selectedLayoutItem.minW || defaultMinSize.minW}
+            onChange={(value) => updateSelectedLayoutItem({ minW: value })}
+          />
+        </InspectorField>
 
-            <InspectorField label="Min Rows">
-              <InspectorNumberInput
-                min={1}
-                value={selectedLayoutItem.minH || defaultMinSize.minH}
-                onChange={(value) => updateSelectedLayoutItem({ minH: value })}
-              />
-            </InspectorField>
-          </div>
-        </InspectorSection>
-      ) : null}
+        <InspectorField label="Min Rows">
+          <InspectorNumberInput
+            min={1}
+            value={selectedLayoutItem.minH || defaultMinSize.minH}
+            onChange={(value) => updateSelectedLayoutItem({ minH: value })}
+          />
+        </InspectorField>
+      </div>
+    </InspectorSection>
+  ) : null;
 
-      <InspectorSection title="Pixel Constraints" defaultOpen={false}>
-        <InspectorToggleField
-          label="Scale with parent"
-          checked={selectedWidget.props.scaleWithParent !== false}
-          onChange={(checked) => updateSelectedWidgetProps({ scaleWithParent: checked })}
-        />
+  const pixelConstraintsSection = (
+    <InspectorSection title="Pixel Constraints" defaultOpen={false}>
+      <InspectorToggleField
+        label="Scale with parent"
+        checked={selectedWidget.props.scaleWithParent !== false}
+        onChange={(checked) => updateSelectedWidgetProps({ scaleWithParent: checked })}
+      />
 
-        <div className="grid grid-cols-2 gap-3">
-          <InspectorField label="Min Width (px)">
-            <InspectorNumberInput
-              min={0}
-              placeholder="200"
-              value={selectedWidget.props.minWidth || ''}
-              onChange={(value) => updateSelectedWidgetProps({ minWidth: value })}
-            />
-          </InspectorField>
+      <div className="grid grid-cols-2 gap-3">
+        <InspectorField label="Min Width (px)">
+          <InspectorNumberInput
+            min={0}
+            placeholder="200"
+            value={selectedWidget.props.minWidth || ''}
+            onChange={(value) => updateSelectedWidgetProps({ minWidth: value })}
+          />
+        </InspectorField>
 
-          <InspectorField label="Min Height (px)">
-            <InspectorNumberInput
-              min={0}
-              placeholder="100"
-              value={selectedWidget.props.minHeight || ''}
-              onChange={(value) => updateSelectedWidgetProps({ minHeight: value })}
-            />
-          </InspectorField>
-        </div>
-      </InspectorSection>
-    </>
+        <InspectorField label="Min Height (px)">
+          <InspectorNumberInput
+            min={0}
+            placeholder="100"
+            value={selectedWidget.props.minHeight || ''}
+            onChange={(value) => updateSelectedWidgetProps({ minHeight: value })}
+          />
+        </InspectorField>
+      </div>
+    </InspectorSection>
   );
 
   return (
@@ -177,8 +171,6 @@ export function WidgetInspectorPanel({
         </div>
       </InspectorSection>
 
-      {!shouldInsertSizingBeforeBorder ? sizingInspectorSections : null}
-
       {showDefinitionInspector ? (
         <StudioDefinitionInspector
           definition={selectedWidgetDefinition}
@@ -189,11 +181,49 @@ export function WidgetInspectorPanel({
           onUpdateProps={updateSelectedWidgetProps}
           onUpdateLayout={updateSelectedLayoutItem}
           onUpdateAutoOccupyRow={updateSelectedWidgetFollowParentWidth}
-          renderBeforeSection={(section) => (
-            shouldInsertSizingBeforeBorder && (section.id === 'frame' || section.title === 'Border')
-              ? sizingInspectorSections
-              : null
-          )}
+          externalSections={[
+            ...(sizeInspectorSection ? [{
+              id: 'size',
+              groupId: 'layout',
+              priority: 5,
+              node: sizeInspectorSection,
+            }] : []),
+            {
+              id: 'bindings',
+              groupId: 'data',
+              priority: 10,
+              node: (
+                <BindingsPanel
+                  compact
+                  bindings={selectedBindings}
+                  sourceOptions={sourceOptions}
+                  onChange={(bindings) => updateSelectedWidgetProps({ bindings })}
+                />
+              ),
+            },
+            {
+              id: 'actions',
+              groupId: 'logic',
+              priority: 20,
+              node: (
+                <ActionsPanel
+                  compact
+                  actions={selectedActions}
+                  sourceOptions={sourceOptions}
+                  pages={pages}
+                  currentPageId={selectedPage?.id ?? null}
+                  onCreateTargetPage={handleCreateActionTargetPage}
+                  onChange={(actions) => updateSelectedWidgetProps({ actions })}
+                />
+              ),
+            },
+            {
+              id: 'pixel-constraints',
+              groupId: 'logic',
+              priority: 30,
+              node: pixelConstraintsSection,
+            },
+          ]}
         />
       ) : null}
 
@@ -235,22 +265,29 @@ export function WidgetInspectorPanel({
         </InspectorSection>
       ) : null}
 
-      <BindingsPanel
-        compact
-        bindings={selectedBindings}
-        sourceOptions={sourceOptions}
-        onChange={(bindings) => updateSelectedWidgetProps({ bindings })}
-      />
+      {!showDefinitionInspector ? (
+        <>
+          {sizeInspectorSection}
+          <BindingsPanel
+            compact
+            bindings={selectedBindings}
+            sourceOptions={sourceOptions}
+            onChange={(bindings) => updateSelectedWidgetProps({ bindings })}
+          />
 
-      <ActionsPanel
-        compact
-        actions={selectedActions}
-        sourceOptions={sourceOptions}
-        pages={pages}
-        currentPageId={selectedPage?.id ?? null}
-        onCreateTargetPage={handleCreateActionTargetPage}
-        onChange={(actions) => updateSelectedWidgetProps({ actions })}
-      />
+          <ActionsPanel
+            compact
+            actions={selectedActions}
+            sourceOptions={sourceOptions}
+            pages={pages}
+            currentPageId={selectedPage?.id ?? null}
+            onCreateTargetPage={handleCreateActionTargetPage}
+            onChange={(actions) => updateSelectedWidgetProps({ actions })}
+          />
+
+          {pixelConstraintsSection}
+        </>
+      ) : null}
 
       {widgetInspectorFooter ? <div className="pt-2">{widgetInspectorFooter}</div> : null}
     </div>
