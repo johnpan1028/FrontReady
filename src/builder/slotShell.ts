@@ -244,11 +244,15 @@ export const getSlotShellLayoutSpan = (contract: {
   rows?: unknown;
 }) => {
   const normalizedContract = normalizeSlotShellContract(contract);
+  const structuralHeight = normalizedContract.rows.reduce((total, row) => (
+    total + getSlotShellRowHeightUnits(row)
+  ), 0);
+
   return {
-    w: normalizedContract.columnCount,
-    h: normalizedContract.rows.reduce((total, row) => total + getSlotShellRowHeightUnits(row), 0),
-    minW: 1,
-    minH: 1,
+    w: Math.max(4, normalizedContract.columnCount * 4),
+    h: Math.max(3, structuralHeight * 3),
+    minW: 2,
+    minH: 2,
   };
 };
 

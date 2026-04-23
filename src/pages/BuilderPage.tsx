@@ -1628,7 +1628,11 @@ export function BuilderPage() {
                                 cols={PROJECT_GRID_COLS}
                                 rowHeight={20}
                                 onDrop={handleDrop as any}
-                                dragConfig={{ enabled: true, cancel: '.external-move-handle, .widget-delete-button, .widget-delete-button *' }}
+                                dragConfig={{
+                                  enabled: true,
+                                  handle: '.widget-wrapper[data-widget-drag-armed="true"]',
+                                  cancel: '.widget-delete-button, .widget-delete-button *',
+                                }}
                                 dropConfig={{
                                   enabled: true,
                                   defaultItem: { w: paletteItem?.w || 4, h: paletteItem?.h || 4 },

@@ -1095,7 +1095,7 @@ export const BUILDER_ASSET_SECTIONS: BuilderAssetSection[] = [
     title: 'Controls',
     description: 'Composable shells that live inside cards.',
     assets: [
-      { id: 'asset-control-slot-shell', kind: 'widget', layer: 'control', widgetType: 'slot_shell', label: 'Slot Shell', description: 'Structure shell for building controls from slots and atoms.', icon: LayoutPanelTop, badge: 'Core', w: 1, h: 1, source: 'native', category: 'shell', surfaces: ['canvas', 'kits'] },
+      { id: 'asset-control-slot-shell', kind: 'widget', layer: 'control', widgetType: 'slot_shell', label: 'Slot Shell', description: 'Structure shell for building controls from slots and atoms.', icon: LayoutPanelTop, badge: 'Core', w: 4, h: 3, source: 'native', category: 'shell', surfaces: ['canvas', 'kits'] },
       { id: 'asset-control-heading', kind: 'widget', layer: 'control', widgetType: 'heading', label: 'Heading', description: 'Text primitive for titles and section anchors.', icon: Heading, badge: 'P0', w: 16, h: 3, source: 'native', category: 'primitive', surfaces: ['canvas', 'kits'] },
       { id: 'asset-control-text', kind: 'widget', layer: 'control', widgetType: 'text', label: 'Paragraph', description: 'Body copy primitive for notes and descriptions.', icon: Type, badge: 'P0', w: 16, h: 5, source: 'native', category: 'primitive', surfaces: ['canvas', 'kits'] },
       { id: 'asset-control-icon', kind: 'widget', layer: 'control', widgetType: 'icon', label: 'Icon', description: 'P0 icon primitive for shells and chrome.', icon: Star, badge: 'P0', w: 4, h: 3, source: 'native', category: 'primitive', surfaces: ['canvas', 'kits'] },

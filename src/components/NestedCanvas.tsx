@@ -49,6 +49,7 @@ const KIT_ROOT_PREVIEW_ACTIVE_ATTR = 'data-kit-root-preview-active';
 const KIT_CROSS_CARD_PREVIEW_EVENT = 'kit-cross-card-drop-preview';
 const KIT_CROSS_CARD_PREVIEW_SOURCE_ATTR = 'data-kit-cross-card-preview-source';
 const KIT_CARD_PIXEL_PREVIEW_ACTIVE_ATTR = 'data-kit-card-pixel-preview-active';
+const RIGHT_CLICK_DRAG_HANDLE_SELECTOR = '.widget-wrapper[data-widget-drag-armed="true"]';
 const COMPACT_GRID_VERTICAL_COMPACTOR = getCompactor('vertical');
 const COMPACT_GRID_HORIZONTAL_COMPACTOR = getCompactor('horizontal');
 
@@ -1428,7 +1429,12 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     if (!nativeDropHost || layoutMode !== 'grid' || !compactGridRulesEnabled || scope !== 'kit') return;
 
     const handleRootCardDragOver = (event: DragEvent | MouseEvent) => {
-      if (!isPointInsideElement(nativeDropHost, event.clientX, event.clientY)) {
+      const activeDragProxyElement = document.querySelector<HTMLElement>('[data-widget-drag-proxy="true"]');
+      const dragProxyBounds = activeDragProxyElement?.getBoundingClientRect();
+      const anchorX = Math.round(dragProxyBounds?.left ?? event.clientX);
+      const anchorY = Math.round(dragProxyBounds?.top ?? event.clientY);
+
+      if (!isPointInsideElement(nativeDropHost, anchorX, anchorY)) {
         setCardPixelPreviewActive(false);
         setCrossCardPreviewItem((current) => (
           current?.i === '__root-card-preview__' ? null : current
@@ -1436,7 +1442,6 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
         return;
       }
 
-      const activeDragProxyElement = document.querySelector<HTMLElement>('[data-widget-drag-proxy="true"]');
       const movedWidgetId = scopedSelectedId;
       const movedWidget = movedWidgetId ? scopedWidgets[movedWidgetId] : undefined;
       if (
@@ -1455,11 +1460,11 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
 
       event.preventDefault();
 
-      const dragProxyBounds = activeDragProxyElement.getBoundingClientRect();
+      const activeProxyBounds = activeDragProxyElement.getBoundingClientRect();
       const previewEvent = {
         currentTarget: nativeDropHost,
-        clientX: event.clientX,
-        clientY: event.clientY,
+        clientX: anchorX,
+        clientY: anchorY,
       } as unknown as React.DragEvent<HTMLDivElement>;
       const previewItem = resolveNativeDropItem(
         previewEvent,
@@ -1471,8 +1476,8 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
       const nextPreviewItem: GridLayoutItem = {
         ...previewItem,
         i: '__root-card-preview__',
-        pixelWidth: dragProxyBounds.width > 0 ? dragProxyBounds.width : undefined,
-        pixelHeight: dragProxyBounds.height > 0 ? dragProxyBounds.height : undefined,
+        pixelWidth: activeProxyBounds.width > 0 ? activeProxyBounds.width : undefined,
+        pixelHeight: activeProxyBounds.height > 0 ? activeProxyBounds.height : undefined,
       };
 
       setCardPixelPreviewActive(true);
@@ -1648,8 +1653,14 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
       const previewHeight = dragProxyBounds.height > 0
         ? dragProxyBounds.height
         : Number(activeRootDragSession?.height);
+      const anchorX = Math.round(dragProxyBounds.left);
+      const anchorY = Math.round(dragProxyBounds.top);
       const previewItem = resolveNativeDropItem(
-        e,
+        {
+          ...e,
+          clientX: anchorX,
+          clientY: anchorY,
+        },
         movedLayoutItem,
         '__root-card-preview__',
         movedWidget,
@@ -1711,14 +1722,20 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
     if (interaction === 'drag' && scope === 'kit' && newItem?.i && pointerEvent) {
       const movedWidgetId = String(newItem.i);
       const movedWidget = scopedWidgets[movedWidgetId];
+      const movedWidgetSelector = `[data-builder-node-id="${escapeAttributeValue(movedWidgetId)}"]`;
+      const draggedWidgetElement = element?.querySelector<HTMLElement>(movedWidgetSelector)
+        ?? document.querySelector<HTMLElement>(movedWidgetSelector);
+      const bounds = (draggedWidgetElement ?? element)?.getBoundingClientRect();
+      const anchorClientX = Math.round(bounds?.left ?? pointerEvent.clientX);
+      const anchorClientY = Math.round(bounds?.top ?? pointerEvent.clientY);
       const targetContainer = findContainerDropTargetAtPoint(
-        pointerEvent.clientX,
-        pointerEvent.clientY,
+        anchorClientX,
+        anchorClientY,
         movedWidgetId,
       );
       const currentContainerElement = getCurrentContainerElement();
       const currentCardContainsDrop = currentContainerElement
-        ? isPointInsideElement(currentContainerElement, pointerEvent.clientX, pointerEvent.clientY)
+        ? isPointInsideElement(currentContainerElement, anchorClientX, anchorClientY)
         : false;
 
       if (currentCardContainsDrop) {
@@ -1763,13 +1780,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
       }
       if (movedWidget && !currentCardContainsDrop) {
         const sourceLayoutItem = scopedLayouts[movedWidget.parentId]?.find((layoutItem) => layoutItem.i === movedWidgetId);
-        const movedWidgetSelector = `[data-builder-node-id="${escapeAttributeValue(movedWidgetId)}"]`;
-        const draggedWidgetElement = element?.querySelector<HTMLElement>(movedWidgetSelector)
-          ?? document.querySelector<HTMLElement>(movedWidgetSelector);
-        const bounds = (draggedWidgetElement ?? element)?.getBoundingClientRect();
-        const boardPosition = bounds
-          ? screenToKitBoardFlowPosition(bounds.left, bounds.top)
-          : screenToKitBoardFlowPosition(pointerEvent.clientX, pointerEvent.clientY);
+        const boardPosition = screenToKitBoardFlowPosition(anchorClientX, anchorClientY);
         if (boardPosition) {
           const boardViewportScale = getKitBoardViewportScale();
           const rootLayoutWidth = bounds?.width && bounds.width > 0
@@ -1811,15 +1822,18 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
       return;
     }
     const sourceLayoutItem = scopedLayouts[movedWidget.parentId]?.find((layoutItem) => layoutItem.i === movedWidgetId);
+    const dragBounds = element.getBoundingClientRect();
+    const anchorClientX = Math.round(dragBounds.left);
+    const anchorClientY = Math.round(dragBounds.top);
 
     const currentContainerElement = getCurrentContainerElement();
     const currentCardContainsDrop = currentContainerElement
-      ? isPointInsideElement(currentContainerElement, event.clientX, event.clientY)
+      ? isPointInsideElement(currentContainerElement, anchorClientX, anchorClientY)
       : false;
-    const pointerInsideNestedCanvas = isPointInsideAnyNestedCanvas(event.clientX, event.clientY);
+    const pointerInsideNestedCanvas = isPointInsideAnyNestedCanvas(anchorClientX, anchorClientY);
     const targetContainer = findContainerDropTargetAtPoint(
-      event.clientX,
-      event.clientY,
+      anchorClientX,
+      anchorClientY,
       movedWidgetId,
     );
 
@@ -1865,10 +1879,10 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
       return;
     }
 
-    if (screenToKitBoardFlowPosition(event.clientX, event.clientY)) {
+    if (screenToKitBoardFlowPosition(anchorClientX, anchorClientY)) {
       clearCrossCardPreview();
       updateExternalDragProxy(element);
-      showExternalRootPreview(movedWidgetId, movedWidget.type, element, event.clientX, event.clientY, {
+      showExternalRootPreview(movedWidgetId, movedWidget.type, element, anchorClientX, anchorClientY, {
         w: Math.max(1, Number(sourceLayoutItem?.w ?? newItem.w ?? 4)),
       });
       return;
@@ -2024,7 +2038,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
           ) as any}
           dragConfig={{
             enabled: true,
-            handle: scope === 'kit' ? '.external-move-handle' : '.widget-wrapper',
+            handle: RIGHT_CLICK_DRAG_HANDLE_SELECTOR,
             cancel: '.widget-delete-button, .widget-delete-button *',
             bounded: scope !== 'kit',
           }}
@@ -2096,7 +2110,7 @@ export const NestedCanvas: React.FC<NestedCanvasProps> = ({
           margin={margin as [number, number]}
           dragConfig={{
             enabled: true,
-            handle: scope === 'kit' ? '.external-move-handle' : '.widget-wrapper',
+            handle: RIGHT_CLICK_DRAG_HANDLE_SELECTOR,
             cancel: '.widget-delete-button, .widget-delete-button *',
             bounded: scope !== 'kit',
           }}

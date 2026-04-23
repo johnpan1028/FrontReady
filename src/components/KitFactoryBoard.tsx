@@ -479,8 +479,7 @@ export function KitFactoryBoard({
         },
         width: size.width,
         height: size.height,
-        draggable: true,
-        dragHandle: '.kit-root-board-handle',
+        draggable: false,
         selected: selectedKitStudioId === layoutItem.i,
         data: {
           widgetId: layoutItem.i,
@@ -669,6 +668,10 @@ export function KitFactoryBoard({
     const handleKitRootDropPreview = (event: Event) => {
       const detail = (event as CustomEvent<KitRootDropPreviewEventDetail>).detail;
       if (!detail || detail.action === 'clear') {
+        clearDropPreview();
+        return;
+      }
+      if (detail.widgetType === 'panel' || detail.widgetType === 'slot_shell') {
         clearDropPreview();
         return;
       }

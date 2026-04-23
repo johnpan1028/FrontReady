@@ -288,6 +288,10 @@ body {
   z-index: 40;
 }
 
+.widget-wrapper[data-widget-dragging='true'][data-builder-parent-id='root'] {
+  opacity: 0;
+}
+
 .widget-wrapper[data-widget-dragging='true'] > div:first-child {
   opacity: 0;
   outline: none;
@@ -331,6 +335,20 @@ body {
     0 0 0 1px color-mix(in srgb, var(--theme-primary) 32%, transparent 68%),
     0 0 0 4px color-mix(in srgb, var(--theme-primary) 10%, transparent 90%),
     0 18px 38px rgba(15, 23, 42, 0.20);
+}
+
+[data-widget-drag-proxy='true'][data-builder-node-type='panel'],
+[data-widget-drag-proxy='true'][data-builder-node-type='slot_shell'] {
+  opacity: 0.92;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--theme-primary) 38%, transparent 62%),
+    0 0 0 6px color-mix(in srgb, var(--theme-primary) 14%, transparent 86%),
+    0 24px 46px rgba(15, 23, 42, 0.24);
+}
+
+[data-widget-drag-proxy='true'][data-builder-node-type='panel'] > div:first-child,
+[data-widget-drag-proxy='true'][data-builder-node-type='slot_shell'] > div:first-child {
+  opacity: 0.9 !important;
 }
 
 [data-widget-drag-proxy='true']::after {
@@ -1521,6 +1539,17 @@ h6 {
 
 .nested-layout > .react-grid-item:hover {
   box-shadow: none;
+}
+
+.nested-layout > .react-grid-item > .react-resizable-handle {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.nested-layout > .react-grid-item.z-10 > .react-resizable-handle {
+  opacity: 0.8;
+  pointer-events: auto;
 }
 
 .react-grid-item.react-grid-placeholder {

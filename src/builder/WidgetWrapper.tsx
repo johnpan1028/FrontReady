@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useBuilderWorkspaceScope } from './workspaceScope';
 import { useBuilderStore } from '../store/builderStore';
 import { WidgetRegistry } from './registry';
-import { Move } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { getWidgetCornerStyle, getWidgetFrameStyle } from '../runtime/frameStyle';
 import { createWidgetId } from '../core/projectDocument';
@@ -13,7 +12,6 @@ interface WidgetWrapperProps {
   id: string;
 }
 
-const KIT_DRAG_WIDGET_SIZE_MIME = 'application/x-kit-widget-size';
 const KIT_BOARD_HOST_SELECTOR = '[data-kit-board-host="true"]';
 const KIT_ROOT_DROP_PREVIEW_EVENT = 'kit-root-drop-preview';
 const KIT_ROOT_DRAG_SESSION_EVENT = 'kit-root-drag-session';
@@ -21,6 +19,10 @@ const KIT_CROSS_CARD_PREVIEW_EVENT = 'kit-cross-card-drop-preview';
 const KIT_ROOT_RESIZE_PREVIEW_EVENT = 'kit-root-resize-preview';
 const NESTED_CANVAS_HOST_SELECTOR = '[data-nested-canvas-host="true"]';
 const ROOT_RESIZE_PREVIEW_HOST_SELECTOR = '.project-theme-scope--inline';
+const ROOT_MASTER_CELL_WIDTH = 28;
+const ROOT_CONTROL_ROW_HEIGHT = 18;
+const ROOT_BOARD_MANAGED_ROW_HEIGHT = 22;
+const ROOT_NODE_GAP = 12;
 const BORDERABLE_CONTROL_TYPES = new Set<WidgetType>([
   'heading',
   'text',
@@ -446,18 +448,192 @@ const parseTransformScale = (transform: string | null | undefined) => {
   return 1;
 };
 
-const getKitBoardViewportScale = (source: HTMLElement) => {
-  const boardHost = source.closest(KIT_BOARD_HOST_SELECTOR) ?? document.querySelector(KIT_BOARD_HOST_SELECTOR);
+const parseViewportTransform = (transform: string | null | undefined) => {
+  if (!transform || transform === 'none') {
+    return { scale: 1, x: 0, y: 0 };
+  }
+
+  const matrix3dMatch = transform.match(/matrix3d\((.+)\)/);
+  if (matrix3dMatch) {
+    const values = matrix3dMatch[1].split(',').map((value) => Number(value.trim()));
+    return {
+      scale: Number.isFinite(values[0]) && values[0] !== 0 ? values[0] : 1,
+      x: Number.isFinite(values[12]) ? values[12] : 0,
+      y: Number.isFinite(values[13]) ? values[13] : 0,
+    };
+  }
+
+  const matrixMatch = transform.match(/matrix\((.+)\)/);
+  if (matrixMatch) {
+    const values = matrixMatch[1].split(',').map((value) => Number(value.trim()));
+    return {
+      scale: Number.isFinite(values[0]) && values[0] !== 0 ? values[0] : 1,
+      x: Number.isFinite(values[4]) ? values[4] : 0,
+      y: Number.isFinite(values[5]) ? values[5] : 0,
+    };
+  }
+
+  return { scale: 1, x: 0, y: 0 };
+};
+
+const getKitBoardViewportScale = (source?: HTMLElement | null) => {
+  const boardHost = source?.closest(KIT_BOARD_HOST_SELECTOR) ?? document.querySelector(KIT_BOARD_HOST_SELECTOR);
   const viewport = boardHost?.querySelector<HTMLElement>('.react-flow__viewport');
   return parseTransformScale(viewport ? window.getComputedStyle(viewport).transform : null);
+};
+
+const screenToKitBoardFlowPosition = (clientX: number, clientY: number) => {
+  const boardHost = document.querySelector<HTMLElement>(KIT_BOARD_HOST_SELECTOR);
+  if (!boardHost) return null;
+
+  const viewport = boardHost.querySelector<HTMLElement>('.react-flow__viewport');
+  const rect = boardHost.getBoundingClientRect();
+  const { scale, x, y } = parseViewportTransform(
+    viewport ? window.getComputedStyle(viewport).transform : null,
+  );
+
+  return {
+    x: Math.round((clientX - rect.left - x) / scale),
+    y: Math.round((clientY - rect.top - y) / scale),
+  };
+};
+
+type RootBoardWidgetMeta = {
+  type: WidgetType;
+  props?: Record<string, unknown>;
+};
+
+const isBoardManagedRootWidget = (widget?: RootBoardWidgetMeta | null) => {
+  if (!widget) return true;
+  const publishedMasterName = typeof widget.props?.kitTemplateName === 'string'
+    ? widget.props.kitTemplateName.trim()
+    : '';
+
+  return isContainerWidget(widget.type) || publishedMasterName.length > 0;
+};
+
+const resolveRootNodePixelSize = (
+  layoutItem: { w: number; h: number },
+  widget?: RootBoardWidgetMeta | null,
+) => {
+  const width = Math.max(1, layoutItem.w * ROOT_MASTER_CELL_WIDTH);
+  const height = Math.max(1, layoutItem.h * (isBoardManagedRootWidget(widget) ? ROOT_BOARD_MANAGED_ROW_HEIGHT : ROOT_CONTROL_ROW_HEIGHT));
+
+  if (!isBoardManagedRootWidget(widget)) {
+    return { width, height };
+  }
+
+  return {
+    width: Math.max(220, width),
+    height: Math.max(140, height),
+  };
+};
+
+const rectsOverlap = (
+  left: { x: number; y: number; width: number; height: number },
+  right: { x: number; y: number; width: number; height: number },
+) => {
+  if (left.x + left.width + ROOT_NODE_GAP <= right.x) return false;
+  if (right.x + right.width + ROOT_NODE_GAP <= left.x) return false;
+  if (left.y + left.height + ROOT_NODE_GAP <= right.y) return false;
+  if (right.y + right.height + ROOT_NODE_GAP <= left.y) return false;
+  return true;
+};
+
+const layoutItemToRootRect = (
+  layoutItem: LayoutItemShape,
+  widget?: RootBoardWidgetMeta | null,
+) => {
+  const size = resolveRootNodePixelSize(layoutItem, widget);
+
+  return {
+    x: Number(layoutItem.x) || 0,
+    y: Number(layoutItem.y) || 0,
+    width: size.width,
+    height: size.height,
+  };
+};
+
+const findRootLayoutCollision = (
+  candidate: LayoutItemShape,
+  rootLayout: readonly LayoutItemShape[],
+  widgets: Record<string, RootBoardWidgetMeta | undefined>,
+  candidateWidget: RootBoardWidgetMeta | undefined,
+  ignoreId?: string,
+) => {
+  const candidateRect = layoutItemToRootRect(candidate, candidateWidget);
+
+  for (const item of rootLayout) {
+    if (item.i === ignoreId || item.i === candidate.i) continue;
+    const widget = widgets[item.i];
+    if (!widget) continue;
+    const itemRect = layoutItemToRootRect(item, widget);
+    if (rectsOverlap(candidateRect, itemRect)) {
+      return itemRect;
+    }
+  }
+
+  return null;
+};
+
+const placeRootLayoutItemWithoutOverlap = (
+  candidate: LayoutItemShape,
+  rootLayout: readonly LayoutItemShape[],
+  widgets: Record<string, RootBoardWidgetMeta | undefined>,
+  candidateWidget: RootBoardWidgetMeta | undefined,
+  ignoreId?: string,
+) => {
+  let nextItem = {
+    ...candidate,
+    x: Math.round(Number(candidate.x) || 0),
+    y: Math.round(Number(candidate.y) || 0),
+    w: Math.max(1, Math.round(Number(candidate.w) || 1)),
+    h: Math.max(1, Math.round(Number(candidate.h) || 1)),
+    ...(candidate.minW != null ? { minW: Math.max(1, Math.round(Number(candidate.minW) || 1)) } : {}),
+    ...(candidate.minH != null ? { minH: Math.max(1, Math.round(Number(candidate.minH) || 1)) } : {}),
+  };
+  let guard = 0;
+
+  while (guard < 200) {
+    const collision = findRootLayoutCollision(nextItem, rootLayout, widgets, candidateWidget, ignoreId);
+    if (!collision) return nextItem;
+
+    nextItem = {
+      ...nextItem,
+      y: Math.ceil((collision.y + collision.height + ROOT_NODE_GAP) / ROOT_CONTROL_ROW_HEIGHT) * ROOT_CONTROL_ROW_HEIGHT,
+    };
+    guard += 1;
+  }
+
+  return nextItem;
+};
+
+const resolveRootLayoutSize = (
+  sourceLayoutItem: { w?: number; h?: number; minW?: number; minH?: number } | undefined,
+  sourceWidget: RootBoardWidgetMeta,
+  draggedSize: { width: number; height: number } | null,
+) => {
+  if (!isBoardManagedRootWidget(sourceWidget) && draggedSize) {
+    return {
+      w: Math.max(1, draggedSize.width / ROOT_MASTER_CELL_WIDTH),
+      h: Math.max(1, draggedSize.height / ROOT_CONTROL_ROW_HEIGHT),
+    };
+  }
+
+  return {
+    w: sourceLayoutItem?.w ?? 8,
+    h: sourceLayoutItem?.h ?? 6,
+  };
 };
 
 export function WidgetWrapper({ id }: WidgetWrapperProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const dragProxyRef = useRef<HTMLElement | null>(null);
   const dragProxyOffsetRef = useRef({ x: 0, y: 0 });
+  const rightButtonDragAnchorOffsetRef = useRef<{ x: number; y: number } | null>(null);
   const rootResizePreviewHostRef = useRef<HTMLElement | null>(null);
   const childResizePreviewBaseWidthRef = useRef<number | null>(null);
+  const rootPointerDragCleanupRef = useRef<(() => void) | null>(null);
   const scope = useBuilderWorkspaceScope();
   const widget = useBuilderStore((state) => (scope === 'kit' ? state.kitStudioWidgets[id] : state.widgets[id]));
   const isSelected = useBuilderStore((state) => (
@@ -496,7 +672,6 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
     lastHeightPx: number;
   } | null>(null);
 
-  const shouldHideMoveHandle = false;
   const showControlsOnHover = true;
   const widgetType = widget?.type ?? null;
   const Component = widgetType ? WidgetRegistry[widgetType] : null;
@@ -504,19 +679,11 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
   const widgetProps = widget?.props ?? {};
   const effectiveWidgetProps = resolveEffectiveWidgetProps(widget, scopedWidgets);
   const isRootKitWidget = scope === 'kit' && widgetParentId === 'root';
-  const publishedMasterName = typeof widgetProps?.kitTemplateName === 'string'
-    ? widgetProps.kitTemplateName.trim()
-    : '';
 
   const widgetStyle = getWidgetFrameStyle(effectiveWidgetProps);
   const widgetCornerStyle = getWidgetCornerStyle(effectiveWidgetProps, widgetType);
   const canAcceptChildDrop = widgetType ? isContainerWidget(widgetType) : false;
-  const isBoardManagedKitNode = isRootKitWidget && (canAcceptChildDrop || publishedMasterName.length > 0);
   const canResizeOnKitBoard = isRootKitWidget && widgetType !== 'slot_shell' && (widgetType === 'panel' || !canAcceptChildDrop);
-  const showSmartMoveHandle = scope === 'kit' && (!isRootKitWidget || !isBoardManagedKitNode);
-  const smartMoveHandlePositionClassName = widgetType === 'slot_shell'
-    ? 'top-1/2 -left-7 -translate-y-1/2'
-    : 'top-1 left-1';
   const childLayout = scopedLayouts[id] ?? [];
   const targetLayoutItem = scopedLayouts[widgetParentId]?.find((item) => item.i === id);
   const targetMaxCols = Math.max(1, Number(targetLayoutItem?.w ?? 12));
@@ -783,11 +950,13 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
     const left = Math.round(clientX - dragProxyOffsetRef.current.x);
     const top = Math.round(clientY - dragProxyOffsetRef.current.y);
     dragProxy.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+    const dragProxyBounds = dragProxy.getBoundingClientRect();
+    const anchorX = Math.round(dragProxyBounds.left);
+    const anchorY = Math.round(dragProxyBounds.top);
 
     const targetContainer = scope === 'kit'
-      ? findContainerDropTargetAtPoint(clientX, clientY, id)
+      ? findContainerDropTargetAtPoint(anchorX, anchorY, id)
       : null;
-    const sourceLayoutItem = scopedLayouts[widgetParentId]?.find((item) => item.i === id);
     if (
       scope === 'kit'
       && isRootKitWidget
@@ -809,7 +978,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       || !isRootKitWidget
       || !widgetType
       || !boardHost
-      || !isPointInsideElement(boardHost, clientX, clientY)
+      || !isPointInsideElement(boardHost, anchorX, anchorY)
     ) {
       clearKitRootDropPreview();
       return;
@@ -824,11 +993,11 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
         top,
         width: dragProxy.offsetWidth || dragProxy.getBoundingClientRect().width,
         height: dragProxy.offsetHeight || dragProxy.getBoundingClientRect().height,
-        clientX,
-        clientY,
+        clientX: anchorX,
+        clientY: anchorY,
       },
     }));
-  }, [id, isRootKitWidget, scope, scopedLayouts, widgetParentId, widgetProps, widgetType]);
+  }, [id, isRootKitWidget, scope, widgetType]);
 
   const cleanupDragProxy = useCallback(() => {
     if (dragProxyRef.current?.parentNode) {
@@ -837,13 +1006,6 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
     dragProxyRef.current = null;
     clearKitRootDropPreview();
     clearKitCrossCardPreview();
-  }, []);
-
-  const ensureTransparentDragImage = useCallback(() => {
-    const pixel = document.createElement('canvas');
-    pixel.width = 1;
-    pixel.height = 1;
-    return pixel;
   }, []);
 
   const createDragProxy = useCallback((clientX: number, clientY: number) => {
@@ -978,66 +1140,266 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
     setDraggedType,
   ]);
 
-  const handleSmartDragEnd = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+  const handleSmartDragEnd = useCallback((dropPoint: { clientX: number; clientY: number }) => {
     if (scope !== 'kit') {
       setDraggedType(null);
       return;
     }
 
-    const currentX = Number(event.clientX ?? 0);
-    const currentY = Number(event.clientY ?? 0);
+    const currentX = Math.round(Number(dropPoint.clientX ?? 0));
+    const currentY = Math.round(Number(dropPoint.clientY ?? 0));
     if (currentX <= 0 && currentY <= 0) {
-      setDraggedType(null);
-      return;
-    }
-
-    const dropElement = document.elementFromPoint(currentX, currentY);
-    const targetContainer = findClosestContainerDropTarget(dropElement);
-
-    if (!targetContainer) {
       setDraggedType(null);
       return;
     }
 
     const { kitStudioWidgets, kitStudioLayouts, updateLayout } = useBuilderStore.getState();
     const latestWidget = kitStudioWidgets[id];
-    if (!latestWidget || latestWidget.id === targetContainer.widgetId) {
+    if (!latestWidget) {
       setDraggedType(null);
       return;
     }
 
-    if (latestWidget.parentId === targetContainer.widgetId) {
-      reorderWidgetInSameContainer(
+    const latestParentElement = latestWidget.parentId !== 'root'
+      ? document.querySelector<HTMLElement>(`[data-builder-node-id="${escapeAttributeValue(latestWidget.parentId)}"]`)
+      : null;
+    const isInsideLatestParent = latestParentElement
+      ? isPointInsideElement(latestParentElement, currentX, currentY)
+      : false;
+
+    let targetContainer = isContainerWidget(latestWidget.type)
+      ? null
+      : findContainerDropTargetAtPoint(currentX, currentY, id);
+
+    if (
+      latestWidget.parentId !== 'root'
+      && !isInsideLatestParent
+      && targetContainer?.widgetId === latestWidget.parentId
+    ) {
+      targetContainer = null;
+    }
+    const boardPosition = screenToKitBoardFlowPosition(currentX, currentY);
+    (window as any).__kitRightDragDecision = {
+      id,
+      currentX,
+      currentY,
+      latestParentId: latestWidget.parentId,
+      isInsideLatestParent,
+      targetContainerId: targetContainer?.widgetId ?? null,
+      boardPosition,
+    };
+
+    if (targetContainer && latestWidget.id !== targetContainer.widgetId) {
+      if (latestWidget.parentId === targetContainer.widgetId) {
+        reorderWidgetInSameContainer(
+          id,
+          targetContainer.widgetId,
+          currentY,
+          targetContainer.element,
+          kitStudioLayouts as Record<string, LayoutItemShape[]>,
+          updateLayout,
+        );
+        setDraggedType(null);
+        return;
+      }
+
+      const latestSourceLayoutItem = (kitStudioLayouts[latestWidget.parentId] ?? []).find((item) => item.i === id);
+      const proposedItem = resolveNestedDropLayoutItem(
         id,
         targetContainer.widgetId,
-        currentY,
-        targetContainer.element,
-        kitStudioLayouts as Record<string, LayoutItemShape[]>,
-        updateLayout,
+        latestWidget.type,
+        latestSourceLayoutItem,
+        latestWidget.props,
+        kitStudioWidgets as Record<string, { parentId: string; type: WidgetType }>,
+        kitStudioLayouts as Record<string, Array<{ i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number }>>,
       );
-      setDraggedType(null);
-      return;
+
+      if (proposedItem) {
+        moveWidget(id, targetContainer.widgetId, proposedItem, 'kit');
+        setDraggedType(null);
+        return;
+      }
     }
 
-    const latestSourceLayoutItem = (kitStudioLayouts[latestWidget.parentId] ?? []).find((item) => item.i === id);
-    const proposedItem = resolveNestedDropLayoutItem(
-      id,
-      targetContainer.widgetId,
-      latestWidget.type,
-      latestSourceLayoutItem,
-      latestWidget.props,
-      kitStudioWidgets as Record<string, { parentId: string; type: WidgetType }>,
-      kitStudioLayouts as Record<string, Array<{ i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number }>>,
-    );
+    if (boardPosition) {
+      const latestSourceLayoutItem = (kitStudioLayouts[latestWidget.parentId] ?? []).find((item) => item.i === id);
+      const dragProxyBounds = dragProxyRef.current?.getBoundingClientRect();
+      const rootLayoutSize = resolveRootLayoutSize(
+        latestSourceLayoutItem,
+        latestWidget,
+        dragProxyBounds && dragProxyBounds.width > 0 && dragProxyBounds.height > 0
+          ? { width: dragProxyBounds.width, height: dragProxyBounds.height }
+          : null,
+      );
+      const proposedItem = placeRootLayoutItemWithoutOverlap({
+        i: id,
+        x: boardPosition.x,
+        y: boardPosition.y,
+        w: rootLayoutSize.w,
+        h: rootLayoutSize.h,
+        minW: latestSourceLayoutItem?.minW,
+        minH: latestSourceLayoutItem?.minH,
+      }, (kitStudioLayouts.root ?? []) as LayoutItemShape[], kitStudioWidgets, latestWidget, id);
 
-    if (!proposedItem) {
-      setDraggedType(null);
-      return;
+      moveWidget(id, 'root', proposedItem, 'kit');
     }
-
-    moveWidget(id, targetContainer.widgetId, proposedItem, 'kit');
     setDraggedType(null);
   }, [id, moveWidget, scope, setDraggedType]);
+
+  const clearWidgetDragArm = useCallback(() => {
+    wrapperRef.current?.removeAttribute('data-widget-drag-armed');
+  }, []);
+
+  const armWidgetDrag = useCallback(() => {
+    wrapperRef.current?.setAttribute('data-widget-drag-armed', 'true');
+  }, []);
+
+  const stopRootPointerDragSession = useCallback((
+    endPoint: { clientX: number; clientY: number },
+    shouldDrop = true,
+  ) => {
+    const cleanup = rootPointerDragCleanupRef.current;
+    rootPointerDragCleanupRef.current = null;
+    cleanup?.();
+
+    const dragProxyBounds = dragProxyRef.current?.getBoundingClientRect();
+    const dropPoint = dragProxyBounds && dragProxyBounds.width > 0 && dragProxyBounds.height > 0
+      ? {
+          clientX: Math.round(dragProxyBounds.left),
+          clientY: Math.round(dragProxyBounds.top),
+        }
+      : endPoint;
+
+    dispatchKitRootDragSession('end', id, widgetType);
+    cleanupDragProxy();
+    clearWidgetDragArm();
+    setIsDragActive(false);
+    if (shouldDrop) {
+      handleSmartDragEnd(dropPoint);
+    } else {
+      setDraggedType(null);
+    }
+  }, [cleanupDragProxy, clearWidgetDragArm, handleSmartDragEnd, id, setDraggedType, widgetType]);
+
+  const handleRootRightMouseDragStart = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!(scope === 'kit' && isRootKitWidget && widgetType)) return false;
+    if (event.button !== 2) return false;
+    if (event.target instanceof Element && event.target.closest('.react-resizable-handle')) {
+      return false;
+    }
+    if (event.target instanceof Element) {
+      const targetWidget = event.target.closest('[data-builder-node-id]');
+      if (targetWidget?.getAttribute('data-builder-node-id') !== id) {
+        return false;
+      }
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    selectWidget(id, scope);
+    clearWidgetDragArm();
+
+    if (rootPointerDragCleanupRef.current) {
+      stopRootPointerDragSession({ clientX: event.clientX, clientY: event.clientY }, false);
+    }
+
+    const bounds = createDragProxy(event.clientX, event.clientY);
+    dispatchKitRootDragSession('start', id, widgetType, bounds
+      ? { width: bounds.width, height: bounds.height }
+      : undefined);
+    setDraggedType(widgetType);
+    setIsDragActive(true);
+
+    let latestPoint = { clientX: event.clientX, clientY: event.clientY };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      latestPoint = { clientX: moveEvent.clientX, clientY: moveEvent.clientY };
+      moveEvent.preventDefault();
+      updateDragProxyPosition(moveEvent.clientX, moveEvent.clientY);
+    };
+
+    const handleMouseUp = (upEvent: MouseEvent) => {
+      latestPoint = { clientX: upEvent.clientX, clientY: upEvent.clientY };
+      upEvent.preventDefault();
+      stopRootPointerDragSession(latestPoint);
+    };
+
+    const handleContextMenu = (contextEvent: MouseEvent) => {
+      contextEvent.preventDefault();
+    };
+
+    const cleanup = () => {
+      document.removeEventListener('mousemove', handleMouseMove, true);
+      document.removeEventListener('mouseup', handleMouseUp, true);
+      document.removeEventListener('contextmenu', handleContextMenu, true);
+    };
+
+    rootPointerDragCleanupRef.current = cleanup;
+    document.addEventListener('mousemove', handleMouseMove, true);
+    document.addEventListener('mouseup', handleMouseUp, true);
+    document.addEventListener('contextmenu', handleContextMenu, true);
+    updateDragProxyPosition(event.clientX, event.clientY);
+
+    return true;
+  }, [
+    clearWidgetDragArm,
+    createDragProxy,
+    id,
+    isRootKitWidget,
+    scope,
+    selectWidget,
+    setDraggedType,
+    stopRootPointerDragSession,
+    updateDragProxyPosition,
+    widgetType,
+  ]);
+
+  const handleRightMouseDragArm = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 2) return;
+    if (event.target instanceof Element && event.target.closest('.react-resizable-handle')) {
+      return;
+    }
+    if (event.target instanceof Element) {
+      const targetWidget = event.target.closest('[data-builder-node-id]');
+      if (targetWidget?.getAttribute('data-builder-node-id') !== id) {
+        return;
+      }
+    }
+
+    if (handleRootRightMouseDragStart(event)) {
+      return;
+    }
+
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    selectWidget(id, scope);
+    armWidgetDrag();
+    const bounds = wrapper.getBoundingClientRect();
+    rightButtonDragAnchorOffsetRef.current = {
+      x: Math.max(0, event.clientX - bounds.left),
+      y: Math.max(0, event.clientY - bounds.top),
+    };
+
+    const syntheticMouseDown = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      screenX: event.screenX,
+      screenY: event.screenY,
+      button: 0,
+      buttons: 1,
+      altKey: event.altKey,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+    });
+    wrapper.dispatchEvent(syntheticMouseDown);
+  }, [armWidgetDrag, handleRootRightMouseDragStart, id, scope, selectWidget]);
 
   useEffect(() => {
     if (!isDragActive) return;
@@ -1061,11 +1423,85 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
 
   useEffect(() => cleanupDragProxy, [cleanupDragProxy]);
 
+  const finalizeArmedRightDrag = useCallback((event?: MouseEvent | Event) => {
+    if (
+      scope === 'kit'
+      && widgetParentId !== 'root'
+      && wrapperRef.current?.hasAttribute('data-widget-drag-armed')
+    ) {
+      const bounds = wrapperRef.current.getBoundingClientRect();
+      const anchorOffset = rightButtonDragAnchorOffsetRef.current;
+      const fallbackDropPoint = {
+        clientX: Math.round(
+          event instanceof MouseEvent && anchorOffset
+            ? event.clientX - anchorOffset.x
+            : bounds.left,
+        ),
+        clientY: Math.round(
+          event instanceof MouseEvent && anchorOffset
+            ? event.clientY - anchorOffset.y
+            : bounds.top,
+        ),
+      };
+      (window as any).__kitRightDragFallback = {
+        id,
+        scope,
+        widgetParentId,
+        fallbackDropPoint,
+      };
+      window.setTimeout(() => {
+        const latestState = useBuilderStore.getState();
+        const latestWidget = scope === 'kit'
+          ? latestState.kitStudioWidgets[id]
+          : latestState.widgets[id];
+        if (!latestWidget || latestWidget.parentId !== widgetParentId) {
+          return;
+        }
+        handleSmartDragEnd({
+          clientX: fallbackDropPoint.clientX,
+          clientY: fallbackDropPoint.clientY,
+        });
+      }, 32);
+    }
+    rightButtonDragAnchorOffsetRef.current = null;
+    clearWidgetDragArm();
+  }, [clearWidgetDragArm, handleSmartDragEnd, id, scope, widgetParentId]);
+
+  useEffect(() => {
+    const handleMouseUp = (event?: MouseEvent | Event) => {
+      finalizeArmedRightDrag(event);
+    };
+
+    const handleContextMenu = (event: MouseEvent) => {
+      if (!wrapperRef.current?.hasAttribute('data-widget-drag-armed')) return;
+      event.preventDefault();
+      finalizeArmedRightDrag(event);
+    };
+
+    document.addEventListener('mouseup', handleMouseUp, true);
+    document.addEventListener('dragend', handleMouseUp, true);
+    document.addEventListener('contextmenu', handleContextMenu, true);
+    window.addEventListener('blur', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mouseup', handleMouseUp, true);
+      document.removeEventListener('dragend', handleMouseUp, true);
+      document.removeEventListener('contextmenu', handleContextMenu, true);
+      window.removeEventListener('blur', handleMouseUp);
+    };
+  }, [finalizeArmedRightDrag]);
+
   useEffect(() => () => {
+    rootPointerDragCleanupRef.current?.();
+    rootPointerDragCleanupRef.current = null;
+    dispatchKitRootDragSession('end', id, widgetType);
     stopRootResize();
+    rightButtonDragAnchorOffsetRef.current = null;
+    clearWidgetDragArm();
+    cleanupDragProxy();
     clearRootResizePreviewStyles();
     clearChildResizePreviewStyles();
-  }, [clearChildResizePreviewStyles, clearRootResizePreviewStyles, stopRootResize]);
+  }, [cleanupDragProxy, clearChildResizePreviewStyles, clearRootResizePreviewStyles, clearWidgetDragArm, id, stopRootResize, widgetType]);
 
   useEffect(() => {
     const shouldStabilizeChildWidth = (
@@ -1199,7 +1635,7 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
       data-widget-selected={isSelected ? 'true' : 'false'}
       data-widget-dragging={isDragActive ? 'true' : 'false'}
       className={cn(
-        'widget-wrapper relative group w-full h-full overflow-visible'
+        'widget-wrapper nopan relative group w-full h-full overflow-visible'
       )}
       style={widgetCornerStyle}
       onDragOverCapture={(e) => {
@@ -1211,92 +1647,27 @@ export function WidgetWrapper({ id }: WidgetWrapperProps) {
         e.dataTransfer.dropEffect = 'move';
       }}
       onDropCapture={handleContainerDropCapture}
+      onMouseDownCapture={handleRightMouseDragArm}
+      onContextMenu={(e) => {
+        e.preventDefault();
+      }}
       onClick={(e) => {
         e.stopPropagation();
         selectWidget(id, scope);
       }}
     >
       <div className="w-full h-full" style={widgetStyle}>
-        {showSmartMoveHandle && (
-          <div
-            className={cn(
-              "external-move-handle absolute z-20 p-1 rounded bg-hr-panel/80 border border-hr-border text-hr-muted cursor-grab active:cursor-grabbing",
-              smartMoveHandlePositionClassName,
-              shouldHideMoveHandle
-                ? 'pointer-events-none opacity-0'
-                : (isSelected ? "opacity-100" : showControlsOnHover ? "opacity-0 group-hover:opacity-100" : "opacity-0")
-            )}
-            draggable={isRootKitWidget}
-            onMouseDown={(e) => {
-              if (isRootKitWidget) {
-                e.stopPropagation();
-              }
-            }}
-            onDragStart={(e) => {
-              if (!isRootKitWidget) {
-                e.preventDefault();
-                return;
-              }
-              e.stopPropagation();
-
-              const bounds = createDragProxy(e.clientX, e.clientY);
-              dispatchKitRootDragSession('start', id, widgetType, bounds
-                ? { width: bounds.width, height: bounds.height }
-                : undefined);
-              if (bounds) {
-                e.dataTransfer.setDragImage(ensureTransparentDragImage(), 0, 0);
-                e.dataTransfer.setData(KIT_DRAG_WIDGET_SIZE_MIME, JSON.stringify({
-                  width: bounds.width,
-                  height: bounds.height,
-                  offsetX: e.clientX > 0 ? e.clientX - bounds.left : 0,
-                  offsetY: e.clientY > 0 ? e.clientY - bounds.top : 0,
-                }));
-              }
-
-              e.dataTransfer.setData('application/x-widget-id', id);
-              e.dataTransfer.setData('application/x-builder-scope', scope);
-              e.dataTransfer.effectAllowed = 'move';
-              if (widgetType) {
-                setDraggedType(widgetType);
-              }
-              setIsDragActive(true);
-            }}
-            onDrag={(e) => {
-              updateDragProxyPosition(Number(e.clientX ?? 0), Number(e.clientY ?? 0));
-            }}
-            onDragEnd={(e) => {
-              dispatchKitRootDragSession('end', id, widgetType);
-              cleanupDragProxy();
-              setIsDragActive(false);
-              handleSmartDragEnd(e);
-            }}
-            title="Drag to move"
-          >
-            <Move size={12} />
-          </div>
-        )}
-        {isBoardManagedKitNode ? (
-          <div
-            className={cn(
-              "kit-root-board-handle absolute top-1 left-1 z-20 p-1 rounded bg-hr-panel/80 border border-hr-border text-hr-muted cursor-grab active:cursor-grabbing",
-              shouldHideMoveHandle
-                ? 'pointer-events-none opacity-0'
-                : (isSelected ? "opacity-100" : showControlsOnHover ? "opacity-0 group-hover:opacity-100" : "opacity-0")
-            )}
-            onMouseDown={(e) => {
-              e.stopPropagation();
-            }}
-            title="Drag on board"
-          >
-            <Move size={12} />
-          </div>
-        ) : null}
         {canResizeOnKitBoard ? (
           <span
             className={cn(
               "react-resizable-handle react-resizable-handle-se absolute z-20 transition-opacity",
-              isSelected ? "opacity-100" : showControlsOnHover ? "opacity-0 group-hover:opacity-100" : "opacity-0",
+              isSelected
+                ? "pointer-events-auto opacity-100"
+                : showControlsOnHover
+                  ? "pointer-events-none opacity-0 group-hover:opacity-100"
+                  : "pointer-events-none opacity-0",
             )}
+            style={{ pointerEvents: isSelected ? 'auto' : 'none' }}
             onPointerDown={handleRootResizePointerDown}
             title={widgetType === 'panel' ? 'Resize card' : 'Resize control'}
           />
